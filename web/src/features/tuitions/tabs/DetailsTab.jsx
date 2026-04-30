@@ -1,5 +1,5 @@
 import Badge from '@/components/ui/Badge'
-import { fd } from 'protutor-shared'
+import { fd } from '@/utils/helpers'
 
 function VCell({ label, value }) {
   return (

@@ -3,7 +3,7 @@
  * Migrated from admin_1.html renderTuitions() tr template.
  */
 import { useDataStore } from '@/store/dataStore'
-import { fd, daysAgo, fmtMonthKey } from 'protutor-shared'
+import { fd, daysAgo, fmtMonthKey } from '@/utils/helpers'
 import Badge from '@/components/ui/Badge'
 import { WAParentButton, WATutorButton } from './components/WAButton'
 import StatusDots from './components/StatusDots'

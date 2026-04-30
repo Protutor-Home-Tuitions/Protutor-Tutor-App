@@ -4,7 +4,7 @@
  */
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
-import { buildParentWAMessage, buildTutorWAMessage, openWhatsApp } from 'protutor-shared'
+import { buildParentWAMessage, buildTutorWAMessage, openWhatsApp } from '@/utils/helpers'
 
 const WA_ICON = (color) => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill={color}>

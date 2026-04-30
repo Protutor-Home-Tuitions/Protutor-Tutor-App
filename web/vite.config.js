@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Resolve shared package directly to avoid npm workspaces issues
+      'protutor-shared': path.resolve(__dirname, '../shared/index.js'),
     },
   },
   server: {

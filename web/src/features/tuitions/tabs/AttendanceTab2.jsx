@@ -36,10 +36,8 @@ export default function AttendanceTab({ tuitionId }) {
   const fetchDetail    = useDataStore((s) => s.fetchTuitionDetail)
 
   const user          = useAuthStore((s) => s.user)
-  // Fallback to localStorage in case Zustand hasn't hydrated yet
-  const effectiveUser = user || (() => { try { return JSON.parse(localStorage.getItem('protutor-auth'))?.state?.user } catch { return null } })()
-  const isManager     = effectiveUser?.role === 'manager'
-  const isCoordinator = effectiveUser?.role === 'coordinator'
+  const isManager     = user?.role === 'manager'
+  const isCoordinator = user?.role === 'coordinator'
   const canWrite      = isManager || isCoordinator
 
   const t      = tuitions.find((t) => t.id === tuitionId)
@@ -71,11 +69,6 @@ export default function AttendanceTab({ tuitionId }) {
 
   return (
     <div>
-      {/* DEBUG - remove after fix */}
-      <div style={{fontSize:11,color:'red',marginBottom:8}}>
-        user: {effectiveUser?.name} | role: {effectiveUser?.role} | canWrite: {String(canWrite)}
-      </div>
-
       {/* Month pills + Add button */}
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-semibold text-slate-700">Select Month</p>

@@ -3,8 +3,8 @@
  * Exact visual match to admin_1.html checkboxCol logic.
  */
 import { useDataStore } from '@/store/dataStore'
-import { buildCommissionChain, isFlowComplete, isBillingEligible } from 'protutor-shared'
-import { fmtMonthKey } from 'protutor-shared'
+import { buildCommissionChain, isFlowComplete, isBillingEligible } from '@/utils/helpers'
+import { fmtMonthKey } from '@/utils/helpers'
 
 function Dot({ done, label }) {
   const bg  = done === true ? '#1A56DB' : done === 'na' ? '#F1F5F9' : '#E2E8F0'
