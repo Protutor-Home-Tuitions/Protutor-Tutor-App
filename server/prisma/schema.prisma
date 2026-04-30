@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Admin Users (coordinators, managers, support) ──
+model AdminUser {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @unique
+  email     String?
+  password  String   // bcrypt hashed in production
+  role      String   // manager | coordinator | support
+  cities    String[] // [] = all cities
+  status    String   @default("active") // active | inactive
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+// ── Tutors ──
+model Tutor {
+  id                 Int       @id @default(autoincrement())
+  name               String
+  phone              String    @unique
+  active             Boolean   @default(true)
+  passDigits         String    @default("")
+  paymentAccountId   String    @default("") // Razorpay account ID
+  accountHolderName  String    @default("")
+  accountNumber      String    @default("")
+  ifscCode           String    @default("")
+  ifscVerified       Boolean   @default(false)
+  panNumber          String    @default("")
+  email              String    @default("")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tuitions Tuition[]
+
+  @@map("tutors")
+}
+
+// ── Tuitions ──
+model Tuition {
+  id            String   @id @default(uuid())
+  enqId         String   @unique  // ENQ-001, AAA-NNNN-NNN format
+  studentName   String
+  parentName    String
+  parentPhone   String
+  standard      String
+  board         String
+  city          String
+  subjects      String[]
+  days          String[]
+  duration      String   // "1", "1.5", "2", "2.5"
+  feeTutor      Int
+  feeParent     Int
+  feeCompany    Int
+  commission    Int      @default(0)
+  feeType       String   // Monthly | Session | Hourly
+  repeatPayment Boolean  @default(false)
+  tutorId       Int?
+  demo          String?  // YYYY-MM-DD
+  start         String?  // YYYY-MM-DD
+  startMonth    String?  // YYYY-MM
+  active        Boolean  @default(true)
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastEditedBy  String?
+  lastEditedAt  DateTime?
+
+  tutor      Tutor?      @relation(fields: [tutorId], references: [id])
+  billings   Billing[]
+  attendance Attendance[]
+
+  @@map("tuitions")
+}
+
+// ── Attendance ──
+model Attendance {
+  id           String   @id @default(uuid())
+  enqId        String
+  tutorId      Int?
+  date         String   // YYYY-MM-DD
+  time         String   // "4:00 PM"
+  dur          String   // "1", "1.5", etc
+  subj         String   @default("")
+  topic        String   @default("")
+  isDemo       Boolean  @default(false)
+  byAdmin      Boolean  @default(false)
+  markedBy     String   @default("") // username
+  markedAt     DateTime @default(now())
+  monthKey     String   // YYYY-MM
+  parentComment String  @default("")
+
+  tuition Tuition @relation(fields: [enqId], references: [enqId])
+
+  @@map("attendance")
+}
+
+// ── Att Completions (submitted by tutor) ──
+model AttCompletion {
+  id          String   @id @default(uuid())
+  enqId       String
+  monthKey    String   // YYYY-MM
+  completedAt DateTime
+  completedBy String   // tutor name / username
+  tutorPhone  String   @default("")
+
+  @@unique([enqId, monthKey])
+  @@map("att_completions")
+}
+
+// ── Billings ──
+model Billing {
+  id         String   @id @default(uuid())
+  enqId      String
+  monthKey   String   // YYYY-MM
+  createdAt  DateTime @default(now())
+  createdBy  String
+  status     String   @default("active") // active | voided
+  zeroBill   Boolean  @default(false)
+  zeroBillReason String @default("")
+  voidedBy   String?
+  voidedAt   DateTime?
+  voidReason String?
+
+  // Snapshot — frozen at billing creation time
+  snapStudentName  String
+  snapFeeParent    Int
+  snapFeeTutor     Int
+  snapFeeType      String
+  snapCommission   Int
+  snapDays         String[]
+  snapDuration     String
+  snapSubjects     String[]
+  snapClasses      Int
+  snapHours        Float
+  snapAmountP      Int
+  snapAmountT      Int
+  snapFeeC         Int
+  snapCountLabel   String  @default("")
+  snapCalcStr      String  @default("")
+
+  tuition Tuition  @relation(fields: [enqId], references: [enqId])
+  payment Payment?
+
+  @@unique([enqId, monthKey, status]) // allow one active + one voided per month
+  @@map("billings")
+}
+
+// ── Payments ──
+model Payment {
+  id                      String   @id @default(uuid())
+  enqId                   String
+  monthKey                String
+  billingId               String?  @unique
+  paymentLink             String   @default("")
+  paymentId               String   @default("")
+  paymentStatus           String   @default("Pending") // Pending | Success | Voided
+  paymentMode             String   @default("") // "" | GPay | Cash | NEFT | Zero-Bill | etc
+  manualCollectedBy       String   @default("")
+  manualNotes             String   @default("")
+  collectedAt             DateTime?
+  transferId              String   @default("")
+  utr                     String   @default("")
+  transferStatus          String   @default("") // "" | Initiated | Created | Settled | Completed | NA
+  snapAccountId           String   @default("")
+  transferAmt             Int?
+  transferAmtOriginal     Int?
+  transferAmtOverride     Int?
+  transferAmtOverrideReason String @default("")
+  transferCreatedBy       String   @default("")
+  transferCreatedAt       DateTime?
+  voidedAt                DateTime?
+  voidedBy                String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  billing Billing? @relation(fields: [billingId], references: [id])
+
+  @@map("payments")
+}
