@@ -1,135 +1,118 @@
-/**
- * dataStore.js
- *
- * Single Zustand store holding ALL application data.
- * Phase 1: local in-memory (same as admin_1.html globals).
- * Phase 2: replace set() calls with API calls (React Query).
- *
- * Data shape is identical to the HTML file — same field names,
- * same seed data — so business logic functions work unchanged.
- */
 import { create } from 'zustand'
-import { SEED_TUTORS, SEED_TUITIONS, SEED_ATTENDANCE,
-         SEED_BILLINGS, SEED_PAYMENTS, SEED_ATT_COMPLETIONS,
-         SEED_ADMIN_USERS } from '@/data/seed'
+import { api } from '@/lib/api'
 
 export const useDataStore = create((set, get) => ({
-  // ── Raw data ──
-  tutors:          SEED_TUTORS,
-  tuitions:        SEED_TUITIONS,
-  attendance:      SEED_ATTENDANCE,
-  billings:        SEED_BILLINGS,
-  payments:        SEED_PAYMENTS,         // { [enqId]: [...paymentRows] }
-  attCompletions:  SEED_ATT_COMPLETIONS,  // { "ENQ-001_2024-11": {...} }
-  adminUsers:      SEED_ADMIN_USERS,
-  waClicks:        {},                    // { "p_tuitionId": count, "t_tuitionId": count }
+  tutors: [], tuitions: [], attendance: {}, billings: {},
+  payments: {}, attCompletions: {}, adminUsers: [], waClicks: {},
+  loading: false, error: null,
 
-  // ── Tutor actions ──
-  addTutor: (tutor) =>
-    set((s) => ({ tutors: [...s.tutors, tutor] })),
+  bootstrap: async () => {
+    set({ loading: true, error: null })
+    try {
+      // Fetch tutors and tuitions in parallel — these always work
+      const [tutors, tuitions] = await Promise.all([
+        api.getTutors(),
+        api.getTuitions(),
+      ])
+      set({ tutors, tuitions, loading: false })
 
-  updateTutor: (id, updates) =>
-    set((s) => ({
-      tutors: s.tutors.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-    })),
+      // Users — only for managers, fetch separately so it doesn't block
+      api.getUsers()
+        .then((adminUsers) => set({ adminUsers }))
+        .catch(() => {}) // non-managers get 403, that's fine
+    } catch (err) {
+      console.error('Bootstrap error:', err)
+      set({ error: err.message, loading: false })
+    }
+  },
 
-  // ── Tuition actions ──
-  addTuition: (tuition) =>
-    set((s) => ({ tuitions: [...s.tuitions, tuition] })),
+  fetchTuitionDetail: async (enqId) => {
+    try {
+      const [attendance, billings, payments, completions] = await Promise.all([
+        api.getAttendance(enqId),
+        api.getBillings(enqId),
+        api.getPayments(enqId),
+        api.getAttCompletions(enqId).catch(() => []),
+      ])
+      const compMap = {}
+      completions.forEach((c) => { compMap[`${c.enqId}_${c.monthKey}`] = c })
+      set((s) => ({
+        attendance:     { ...s.attendance,     [enqId]: attendance },
+        billings:       { ...s.billings,       [enqId]: billings },
+        payments:       { ...s.payments,       [enqId]: payments },
+        attCompletions: { ...s.attCompletions, ...compMap },
+      }))
+    } catch (err) {
+      console.error('fetchTuitionDetail error:', err)
+    }
+  },
 
-  updateTuition: (id, updates) =>
-    set((s) => ({
-      tuitions: s.tuitions.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-    })),
+  addTuition: async (data) => {
+    const tuition = await api.createTuition(data)
+    set((s) => ({ tuitions: [tuition, ...s.tuitions] }))
+    return tuition
+  },
 
-  // ── Attendance actions ──
-  addAttendance: (record) =>
-    set((s) => ({ attendance: [...s.attendance, record] })),
+  updateTuition: async (id, data) => {
+    const tuition = await api.updateTuition(id, data)
+    set((s) => ({ tuitions: s.tuitions.map((t) => (t.id === id ? tuition : t)) }))
+    return tuition
+  },
 
-  updateAttendance: (id, updates) =>
-    set((s) => ({
-      attendance: s.attendance.map((a) => (a.id === id ? { ...a, ...updates } : a)),
-    })),
+  addTutor: async (data) => {
+    const tutor = await api.createTutor(data)
+    set((s) => ({ tutors: [...s.tutors, tutor] }))
+    return tutor
+  },
 
-  deleteAttendance: (id) =>
-    set((s) => ({ attendance: s.attendance.filter((a) => a.id !== id) })),
+  updateTutor: async (id, data) => {
+    const tutor = await api.updateTutor(id, data)
+    set((s) => ({ tutors: s.tutors.map((t) => (t.id === id ? tutor : t)) }))
+    return tutor
+  },
 
-  // ── Billing actions ──
-  addBilling: (billing) =>
-    set((s) => ({ billings: [...s.billings, billing] })),
+  addBilling: async (data) => {
+    const billing = await api.createBilling(data)
+    const enqId = data.enqId
+    set((s) => ({ billings: { ...s.billings, [enqId]: [...(s.billings[enqId] || []), billing] } }))
+    const payments = await api.getPayments(enqId)
+    set((s) => ({ payments: { ...s.payments, [enqId]: payments } }))
+    return billing
+  },
 
-  voidBilling: (id, voidedBy, voidReason) =>
-    set((s) => ({
-      billings: s.billings.map((b) =>
-        b.id === id
-          ? { ...b, status: 'voided', voidedBy, voidedAt: new Date().toISOString(), voidReason }
-          : b
-      ),
-    })),
+  voidBilling: async (id, enqId, voidReason) => {
+    const billing = await api.voidBilling(id, { voidReason })
+    set((s) => ({ billings: { ...s.billings, [enqId]: s.billings[enqId]?.map((b) => (b.id === id ? billing : b)) || [] } }))
+    const payments = await api.getPayments(enqId)
+    set((s) => ({ payments: { ...s.payments, [enqId]: payments } }))
+  },
 
-  // ── Payment actions ──
-  initPayments: (enqId) =>
-    set((s) => ({
-      payments: { ...s.payments, [enqId]: s.payments[enqId] || [] },
-    })),
+  markManualPayment: async (paymentId, enqId, data) => {
+    const payment = await api.markCollected(paymentId, data)
+    set((s) => ({ payments: { ...s.payments, [enqId]: s.payments[enqId]?.map((p) => (p.id === paymentId ? payment : p)) || [] } }))
+  },
 
-  addPaymentRow: (enqId, row) =>
-    set((s) => ({
-      payments: {
-        ...s.payments,
-        [enqId]: [...(s.payments[enqId] || []), row],
-      },
-    })),
+  recordManualTransfer: async (paymentId, enqId, data) => {
+    const payment = await api.recordTransfer(paymentId, data)
+    set((s) => ({ payments: { ...s.payments, [enqId]: s.payments[enqId]?.map((p) => (p.id === paymentId ? payment : p)) || [] } }))
+  },
 
-  updatePaymentRow: (enqId, monthKey, updates) =>
-    set((s) => {
-      const rows = s.payments[enqId] || []
-      return {
-        payments: {
-          ...s.payments,
-          [enqId]: rows.map((p) =>
-            p.monthKey === monthKey && p.paymentStatus !== 'Voided'
-              ? { ...p, ...updates }
-              : p
-          ),
-        },
-      }
-    }),
-
-  voidPaymentRow: (enqId, monthKey) =>
-    set((s) => {
-      const rows = s.payments[enqId] || []
-      return {
-        payments: {
-          ...s.payments,
-          [enqId]: rows.map((p) =>
-            p.monthKey === monthKey ? { ...p, paymentStatus: 'Voided' } : p
-          ),
-        },
-      }
-    }),
-
-  // ── Att completions ──
-  setAttCompletion: (enqId, monthKey, data) =>
-    set((s) => ({
-      attCompletions: {
-        ...s.attCompletions,
-        [`${enqId}_${monthKey}`]: data,
-      },
-    })),
-
-  // ── WhatsApp click tracking ──
   incrementWAClick: (key) =>
-    set((s) => ({
-      waClicks: { ...s.waClicks, [key]: (s.waClicks[key] || 0) + 1 },
-    })),
+    set((s) => ({ waClicks: { ...s.waClicks, [key]: (s.waClicks[key] || 0) + 1 } })),
 
-  // ── Admin users ──
-  addAdminUser: (user) =>
-    set((s) => ({ adminUsers: [...s.adminUsers, user] })),
+  addAdminUser: async (data) => {
+    const user = await api.createUser(data)
+    set((s) => ({ adminUsers: [...s.adminUsers, user] }))
+    return user
+  },
 
-  updateAdminUser: (id, updates) =>
-    set((s) => ({
-      adminUsers: s.adminUsers.map((u) => (u.id === id ? { ...u, ...updates } : u)),
-    })),
+  updateAdminUser: async (id, data) => {
+    const user = await api.updateUser(id, data)
+    set((s) => ({ adminUsers: s.adminUsers.map((u) => (u.id === id ? user : u)) }))
+    return user
+  },
+
+  getAttendanceFor: (enqId) => get().attendance[enqId] || [],
+  getBillingsFor:   (enqId) => get().billings[enqId]   || [],
+  getPaymentsFor:   (enqId) => get().payments[enqId]   || [],
 }))
