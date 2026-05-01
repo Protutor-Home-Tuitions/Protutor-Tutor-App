@@ -65,3 +65,29 @@ router.delete('/:id', requireAuth, requireCanWrite, async (req, res) => {
 })
 
 export default router
+
+// POST /api/attendance/complete — tutor submits month
+router.post('/complete', requireAuth, async (req, res) => {
+  try {
+    const { enqId, monthKey } = req.body
+    if (!enqId || !monthKey) return res.status(400).json({ error: 'enqId and monthKey required' })
+
+    const existing = await prisma.attCompletion.findUnique({
+      where: { enqId_monthKey: { enqId, monthKey } },
+    })
+    if (existing) return res.status(409).json({ error: 'Already submitted' })
+
+    const completion = await prisma.attCompletion.create({
+      data: {
+        enqId, monthKey,
+        completedAt: new Date(),
+        completedBy: req.user.name || 'Tutor',
+        tutorPhone: req.user.phone || '',
+      },
+    })
+    res.status(201).json(completion)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})

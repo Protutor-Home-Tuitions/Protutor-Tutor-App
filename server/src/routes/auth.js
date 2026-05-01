@@ -54,3 +54,39 @@ router.get('/me', async (req, res) => {
 })
 
 export default router
+
+// POST /api/auth/tutor-login
+// Password format: name.slice(0,4).toLowerCase()@passDigits
+router.post('/tutor-login', async (req, res) => {
+  try {
+    const { phone, password } = req.body
+    if (!phone || !password) {
+      return res.status(400).json({ error: 'Phone and password required' })
+    }
+
+    const tutor = await prisma.tutor.findUnique({ where: { phone } })
+    if (!tutor) {
+      return res.status(401).json({ error: 'Phone number not registered.' })
+    }
+    if (!tutor.active) {
+      return res.status(401).json({ error: 'Your account has been deactivated. Please contact your coordinator.' })
+    }
+
+    // Password: first 4 chars of name (lowercase, no spaces) + @ + passDigits
+    const expectedPass = tutor.name.slice(0, 4).toLowerCase().replace(/\s/g, '') + '@' + (tutor.passDigits || tutor.phone.slice(0, 3))
+    if (password !== expectedPass) {
+      return res.status(401).json({ error: 'Incorrect password.' })
+    }
+
+    const token = jwt.sign(
+      { id: tutor.id, name: tutor.name, phone: tutor.phone, role: 'tutor' },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    )
+
+    res.json({ token, tutor })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
