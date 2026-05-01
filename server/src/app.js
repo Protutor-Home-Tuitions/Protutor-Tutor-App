@@ -15,9 +15,23 @@ dotenv.config()
 const app  = express()
 const PORT = process.env.PORT || 4000
 
-// ── CORS — allow React dev server ──
+// ── CORS ──
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://panel.protutor.co.in',
+  'https://admin.protutor.co.in',
+  'https://admin.protutor.in',
+  process.env.FRONTEND_URL,
+].filter(Boolean)
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', process.env.FRONTEND_URL].filter(Boolean),
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true)
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    callback(new Error(`CORS blocked: ${origin}`))
+  },
   credentials: true,
 }))
 
