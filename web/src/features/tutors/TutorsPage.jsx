@@ -41,6 +41,7 @@ function TutorFormModal({ tutorId, onClose }) {
     setSaving(true)
     const payload = {
       name: name.trim(), phone: phone.trim(), active: existing?.active ?? true,
+      passDigits: passDigits,
       ...(isManager ? {
         accountHolderName: accHolder, accountNumber: accNumber,
         ifscCode: ifsc.toUpperCase(), panNumber: pan.toUpperCase(),
@@ -59,8 +60,11 @@ function TutorFormModal({ tutorId, onClose }) {
   }
 
   // Login credentials preview
+  const [passDigits] = useState(
+    existing?.passDigits || Math.floor(100 + Math.random() * 900).toString()
+  )
   const uname = phone.slice(-4) + name.slice(0,3).toLowerCase().replace(/\s/g,'')
-  const pass  = name.slice(0,4).toLowerCase().replace(/\s/g,'') + '@' + (existing?.passDigits || '---')
+  const pass  = name.slice(0,4).toLowerCase().replace(/\s/g,'') + '@' + passDigits
 
   return (
     <Modal open onClose={onClose} size="md" zIndex={200}
