@@ -7,9 +7,10 @@
     "seed": "node prisma/seed.cjs"
   },
   "scripts": {
-    "vercel-build": "prisma generate",  
     "dev": "node --watch src/app.js",
     "start": "node src/app.js",
+    "build": "prisma generate",
+    "vercel-build": "prisma generate",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",

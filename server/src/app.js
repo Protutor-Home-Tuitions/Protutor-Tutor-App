@@ -15,23 +15,9 @@ dotenv.config()
 const app  = express()
 const PORT = process.env.PORT || 4000
 
-// ── CORS ──
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://panel.protutor.co.in',
-  'https://admin.protutor.co.in',
-  'https://admin.protutor.in',
-  process.env.FRONTEND_URL,
-].filter(Boolean)
-
+// ── CORS — allow all origins (restrict after confirming deployment works) ──
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) return callback(null, true)
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
-    callback(new Error(`CORS blocked: ${origin}`))
-  },
+  origin: true,
   credentials: true,
 }))
 
