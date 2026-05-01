@@ -1,9 +1,8 @@
 import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '../lib/prisma.js'
 import { requireAuth, requireCanWrite, requireManager } from '../middleware/auth.js'
 
 const router = Router()
-const prisma  = new PrismaClient()
 
 router.get('/', requireAuth, async (_req, res) => {
   res.json(await prisma.tutor.findMany({ orderBy: { name: 'asc' } }))

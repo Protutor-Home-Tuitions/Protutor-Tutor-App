@@ -1,9 +1,8 @@
 import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '../lib/prisma.js'
 import { requireAuth, requireCanWrite } from '../middleware/auth.js'
 
 const router = Router()
-const prisma  = new PrismaClient()
 
 // GET /api/attendance/completions/:enqId  — MUST be before /:enqId
 router.get('/completions/:enqId', requireAuth, async (req, res) => {
