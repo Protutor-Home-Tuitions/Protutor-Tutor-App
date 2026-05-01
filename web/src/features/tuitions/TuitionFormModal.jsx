@@ -14,14 +14,6 @@ const FEE_TYPES = ['Monthly','Session','Hourly']
 const STANDARDS = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th']
 const DURATIONS = ['0.5','1','1.5','2','2.5','3']
 
-function genEnqId() {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const l = letters[Math.floor(Math.random()*26)]+letters[Math.floor(Math.random()*26)]+letters[Math.floor(Math.random()*26)]
-  const n1 = String(Math.floor(1000+Math.random()*9000))
-  const n2 = String(Math.floor(100+Math.random()*900))
-  return `${l}-${n1}-${n2}`
-}
-
 export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
   const tuitions = useDataStore((s) => s.tuitions)
   const tutors   = useDataStore((s) => s.tutors)
@@ -49,7 +41,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
   const [tutorId,      setTutorId]      = useState(existing?.tutorId      || '')
   const [demo,         setDemo]         = useState(existing?.demo         || '')
   const [start,        setStart]        = useState(existing?.start        || '')
-  const [enqId,        setEnqId]        = useState(existing?.enqId        || genEnqId())
+  const [enqId, setEnqId] = useState(existing?.enqId || '')
   const [error,        setError]        = useState('')
   const [saving,       setSaving]       = useState(false)
 
@@ -126,15 +118,26 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
         {/* Enquiry ID */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Enquiry ID <span className="text-red-500">*</span></label>
-            <div className="flex gap-2">
-              <input value={enqId} onChange={(e) => setEnqId(e.target.value)}
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
-              {!isEdit && <button type="button" onClick={() => setEnqId(genEnqId())}
-                className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-200">
-                Generate
-              </button>}
-            </div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              Enquiry ID <span className="text-red-500">*</span>
+              <span className="text-slate-300 font-normal normal-case ml-1">e.g. CHN-2601-103</span>
+            </label>
+            <input
+              value={enqId}
+              onChange={(e) => {
+                // Match original formatEnqId: 3 letters - 4 numbers - 3 numbers
+                let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'')
+                let out = ''
+                if (v.length > 0) out += v.slice(0,3)
+                if (v.length > 3) out += '-' + v.slice(3,7)
+                if (v.length > 7) out += '-' + v.slice(7,10)
+                setEnqId(out)
+              }}
+              placeholder="CHN-2601-103"
+              maxLength={12}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-widest"
+              style={{ letterSpacing: '1px' }}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">City</label>
