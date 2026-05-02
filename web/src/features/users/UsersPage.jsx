@@ -9,6 +9,38 @@ import { ALL_CITIES, ROLE_LABELS } from '@/utils/helpers'
 const ROLES = ['manager','coordinator','support']
 const ROLE_COLORS = { manager:'blue', coordinator:'green', support:'yellow' }
 
+// ── Read-only view modal for non-managers ──
+function UserViewModal({ userId, onClose }) {
+  const adminUsers = useDataStore((s) => s.adminUsers)
+  const u = adminUsers.find((u) => u.id === userId)
+  if (!u) return null
+
+  function Row({ label, value }) {
+    return (
+      <div className="bg-slate-50 rounded-lg px-4 py-3">
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{label}</div>
+        <div className="text-sm font-medium text-slate-700">{value || '—'}</div>
+      </div>
+    )
+  }
+
+  return (
+    <Modal open onClose={onClose} size="sm" zIndex={200}
+      title="Account Details"
+      footer={<Button onClick={onClose}>Close</Button>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Row label="Name"            value={u.name} />
+        <Row label="Phone"           value={u.phone} />
+        <Row label="Email / Username" value={u.email} />
+        <Row label="Role"            value={ROLE_LABELS[u.role] || u.role} />
+        <Row label="Status"          value={u.status === 'active' ? 'Active' : 'Inactive'} />
+        <Row label="Assigned Cities" value={u.cities?.length ? u.cities.join(', ') : 'All cities'} />
+      </div>
+    </Modal>
+  )
+}
+
 function UserFormModal({ userId, onClose }) {
   const adminUsers   = useDataStore((s) => s.adminUsers)
   const addAdminUser = useDataStore((s) => s.addAdminUser)
@@ -126,12 +158,21 @@ function UserFormModal({ userId, onClose }) {
 export default function UsersPage() {
   const [search,  setSearch]  = useState('')
   const [editId,  setEditId]  = useState(null)
+  const [viewId,  setViewId]  = useState(null)
   const [addOpen, setAddOpen] = useState(false)
 
   const adminUsers = useDataStore((s) => s.adminUsers)
   const user       = useAuthStore((s) => s.user)
+  const isManager  = user?.role === 'manager'
 
   const filtered = adminUsers.filter((u) => {
+    // Non-managers only see users who share at least one city with them
+    // (or users with no city restriction = all cities)
+    if (!isManager && user?.cities?.length) {
+      const uCities = u.cities || []
+      // Show: same city users OR users with no city restriction (managers)
+      if (uCities.length > 0 && !uCities.some((c) => user.cities.includes(c))) return false
+    }
     if (!search) return true
     const q = search.toLowerCase()
     return u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.includes(q)
@@ -144,7 +185,7 @@ export default function UsersPage() {
           <h1 className="text-xl font-bold text-slate-800">Users & Coordinators</h1>
           <p className="text-slate-500 text-sm mt-0.5">Manage team access — Admin</p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add User</Button>
+        {isManager && <Button onClick={() => setAddOpen(true)}>+ Add User</Button>}
       </div>
 
       <div className="flex gap-3 mb-5">
@@ -186,8 +227,12 @@ export default function UsersPage() {
                     <Badge variant={u.status === 'active' ? 'green' : 'red'}>{u.status === 'active' ? 'Active' : 'Inactive'}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => setEditId(u.id)}
-                      className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">Edit</button>
+                    {isManager
+                      ? <button onClick={() => setEditId(u.id)}
+                          className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">Edit</button>
+                      : <button onClick={() => setViewId(u.id)}
+                          className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">View</button>
+                    }
                   </td>
                 </tr>
               ))}
@@ -197,6 +242,7 @@ export default function UsersPage() {
 
       {addOpen && <UserFormModal onClose={() => setAddOpen(false)} />}
       {editId  && <UserFormModal userId={editId} onClose={() => setEditId(null)} />}
+      {viewId  && <UserViewModal userId={viewId} onClose={() => setViewId(null)} />}
     </div>
   )
 }

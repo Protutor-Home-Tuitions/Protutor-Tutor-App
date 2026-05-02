@@ -18,12 +18,77 @@ function ConfirmModal({ open, title, message, confirmLabel, confirmVariant = 'da
         </>
       }
     >
-      <p className="text-slate-600 text-sm">{message}</p>
+      <p className="text-slate-600 text-sm leading-relaxed">{message}</p>
     </Modal>
   )
 }
 
-// ── Tutor Add/Edit modal ──
+// ── Read-only view modal ──
+function TutorViewModal({ tutorId, onClose }) {
+  const tutors   = useDataStore((s) => s.tutors)
+  const tuitions = useDataStore((s) => s.tuitions)
+  const t = tutors.find((t) => t.id === tutorId)
+  if (!t) return null
+
+  const total  = tuitions.filter((tu) => tu.tutorId === t.id).length
+  const active = tuitions.filter((tu) => tu.tutorId === t.id && tu.active).length
+  const bankSet = !!(t.accountHolderName && t.accountNumber && t.ifscCode)
+
+  function Row({ label, value }) {
+    return (
+      <div className="bg-slate-50 rounded-lg px-4 py-3">
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{label}</div>
+        <div className="text-sm font-medium text-slate-700">{value || '—'}</div>
+      </div>
+    )
+  }
+
+  return (
+    <Modal open onClose={onClose} size="md" zIndex={200}
+      title={`Tutor — ${t.name}`}
+      footer={<Button onClick={onClose}>Close</Button>}
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Row label="Full Name" value={t.name} />
+          <Row label="Phone (Login ID)" value={t.phone} />
+          <Row label="Status" value={t.active ? 'Active' : 'Inactive'} />
+          <Row label="Students" value={`${active} active / ${total} total`} />
+        </div>
+
+        {/* Login credentials */}
+        <div className="px-4 py-3 bg-slate-50 rounded-lg border border-slate-100">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Login Credentials</p>
+          <div className="flex gap-4 text-sm">
+            <div>
+              <span className="text-slate-400 text-xs">Username</span>
+              <p className="font-mono font-semibold text-slate-700">{t.phone}</p>
+            </div>
+            <div>
+              <span className="text-slate-400 text-xs">Password</span>
+              <p className="font-mono font-semibold text-blue-600">
+                {t.name.slice(0,4).toLowerCase().replace(/\s/g,'')}@{t.passDigits || '***'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Bank status */}
+        <div className="px-4 py-3 bg-slate-50 rounded-lg border border-slate-100">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Bank Details</p>
+          <span className={`text-xs px-2 py-1 rounded-full font-semibold ${bankSet ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+            {bankSet ? 'Bank details on file ✓' : 'No bank details'}
+          </span>
+          {t.paymentAccountId && (
+            <p className="text-xs font-mono text-slate-500 mt-2">Account ID: {t.paymentAccountId}</p>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Add/Edit modal — manager only for edit ──
 function TutorFormModal({ tutorId, onClose }) {
   const tutors      = useDataStore((s) => s.tutors)
   const addTutor    = useDataStore((s) => s.addTutor)
@@ -57,7 +122,6 @@ function TutorFormModal({ tutorId, onClose }) {
     if (!phone.trim()) { setError('Phone number is required.'); return }
     if (phone.length !== 10 || !/^\d{10}$/.test(phone)) { setError('Enter a valid 10-digit phone number.'); return }
 
-    // Duplicate phone check
     const dup = tutors.find((t) => t.phone === phone.trim() && t.id !== tutorId)
     if (dup) { setError(`A tutor with phone ${phone} already exists — ${dup.name}.`); return }
 
@@ -77,8 +141,7 @@ function TutorFormModal({ tutorId, onClose }) {
       else        await addTutor(payload)
       onClose()
     } catch (err) {
-      // Handle DB-level duplicate phone error
-      if (err.message?.toLowerCase().includes('unique') || err.message?.toLowerCase().includes('duplicate') || err.message?.toLowerCase().includes('already')) {
+      if (err.message?.toLowerCase().includes('unique') || err.message?.toLowerCase().includes('already')) {
         setError(`Phone number ${phone} is already registered to another tutor.`)
       } else {
         setError(err.message || 'Failed to save. Please try again.')
@@ -98,19 +161,11 @@ function TutorFormModal({ tutorId, onClose }) {
         </>
       }
     >
-      {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
-        </div>
-      )}
-
+      {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
       <div className="space-y-4">
-        {/* Name + Phone */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              Full Name <span className="text-red-500">*</span>
-            </label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Full Name <span className="text-red-500">*</span></label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tutor full name"
               className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
@@ -125,7 +180,6 @@ function TutorFormModal({ tutorId, onClose }) {
           </div>
         </div>
 
-        {/* Login credentials preview */}
         <div className="px-4 py-3 bg-slate-50 rounded-lg border border-slate-100">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Login Credentials</p>
           <div className="flex gap-4 text-sm">
@@ -140,7 +194,6 @@ function TutorFormModal({ tutorId, onClose }) {
           </div>
         </div>
 
-        {/* Bank section — manager only */}
         {isManager && (
           <div>
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
@@ -154,36 +207,21 @@ function TutorFormModal({ tutorId, onClose }) {
             </div>
             <div className={`space-y-3 ${!bankEdit ? 'opacity-50 pointer-events-none' : ''}`}>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Account Holder</label>
-                  <input value={accHolder} onChange={(e) => setAccHolder(e.target.value)} placeholder="Name as per bank"
-                    readOnly={!bankEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Account Number</label>
-                  <input value={accNumber} onChange={(e) => setAccNumber(e.target.value.replace(/\D/g,''))} placeholder="Account number"
-                    readOnly={!bankEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">IFSC Code</label>
-                  <input value={ifsc} onChange={(e) => setIfsc(e.target.value.toUpperCase())} placeholder="e.g. HDFC0001234"
-                    readOnly={!bankEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">PAN Number</label>
-                  <input value={pan} onChange={(e) => setPan(e.target.value.toUpperCase())} placeholder="e.g. ABCDE1234F"
-                    readOnly={!bankEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Email</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address"
-                    readOnly={!bankEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Payment Account ID</label>
-                  <input value={payAccId} onChange={(e) => setPayAccId(e.target.value)} placeholder="Razorpay account ID"
-                    readOnly={!bankEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
-                </div>
+                {[
+                  ['Account Holder', accHolder, setAccHolder, 'Name as per bank', false],
+                  ['Account Number', accNumber, (v) => setAccNumber(v.replace(/\D/g,'')), 'Account number', false],
+                  ['IFSC Code', ifsc, (v) => setIfsc(v.toUpperCase()), 'e.g. HDFC0001234', true],
+                  ['PAN Number', pan, (v) => setPan(v.toUpperCase()), 'e.g. ABCDE1234F', true],
+                  ['Email', email, setEmail, 'Email address', false],
+                  ['Payment Account ID', payAccId, setPayAccId, 'Razorpay account ID', true],
+                ].map(([label, value, setter, placeholder, mono]) => (
+                  <div key={label}>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</label>
+                    <input value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder}
+                      readOnly={!bankEdit}
+                      className={`w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${mono ? 'font-mono' : ''}`} />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -197,8 +235,9 @@ function TutorFormModal({ tutorId, onClose }) {
 export default function TutorsPage() {
   const [search,    setSearch]    = useState('')
   const [editId,    setEditId]    = useState(null)
+  const [viewId,    setViewId]    = useState(null)
   const [addOpen,   setAddOpen]   = useState(false)
-  const [confirmId, setConfirmId] = useState(null) // tutor being toggled
+  const [confirmId, setConfirmId] = useState(null)
   const [toggling,  setToggling]  = useState(false)
 
   const tutors      = useDataStore((s) => s.tutors)
@@ -206,9 +245,19 @@ export default function TutorsPage() {
   const updateTutor = useDataStore((s) => s.updateTutor)
   const user        = useAuthStore((s) => s.user)
   const isManager   = user?.role === 'manager'
-  const canWrite    = isManager || user?.role === 'coordinator'
+  const canAdd      = isManager || user?.role === 'coordinator'
+
+  // City filter — manager sees all, others see tutors from their assigned cities only
+  // A tutor belongs to a city if they have active tuitions in that city
+  const cityAllowed = (tutorId) => {
+    if (isManager) return true
+    if (!user?.cities?.length) return true
+    // Check if tutor has any tuition in allowed cities
+    return tuitions.some((tu) => tu.tutorId === tutorId && user.cities.includes(tu.city))
+  }
 
   const filtered = tutors.filter((t) => {
+    if (!cityAllowed(t.id)) return false
     if (!search) return true
     const q = search.toLowerCase()
     return t.name.toLowerCase().includes(q) || t.phone.includes(q)
@@ -234,9 +283,9 @@ export default function TutorsPage() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold text-slate-800">Tutors</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Manage tutor accounts — {user?.role === 'manager' ? 'Admin' : user?.role}</p>
+          <p className="text-slate-500 text-sm mt-0.5">Manage tutor accounts — {isManager ? 'Admin' : user?.role}</p>
         </div>
-        {canWrite && <Button onClick={() => setAddOpen(true)}>+ Add Tutor</Button>}
+        {canAdd && <Button onClick={() => setAddOpen(true)}>+ Add Tutor</Button>}
       </div>
 
       <div className="flex gap-3 mb-5">
@@ -286,12 +335,20 @@ export default function TutorsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          <button onClick={() => setEditId(t.id)}
-                            className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">Edit</button>
-                          <button onClick={() => setConfirmId(t.id)}
-                            className={`px-3 py-1.5 text-xs font-medium border rounded-lg hover:bg-slate-50 ${t.active ? 'border-red-200 text-red-600' : 'border-green-200 text-green-600'}`}>
-                            {t.active ? 'Deactivate' : 'Activate'}
-                          </button>
+                          {/* Manager → Edit, Others → View */}
+                          {isManager
+                            ? <button onClick={() => setEditId(t.id)}
+                                className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">Edit</button>
+                            : <button onClick={() => setViewId(t.id)}
+                                className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">View</button>
+                          }
+                          {/* Deactivate/Activate — manager only */}
+                          {isManager && (
+                            <button onClick={() => setConfirmId(t.id)}
+                              className={`px-3 py-1.5 text-xs font-medium border rounded-lg hover:bg-slate-50 ${t.active ? 'border-red-200 text-red-600' : 'border-green-200 text-green-600'}`}>
+                              {t.active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -305,10 +362,9 @@ export default function TutorsPage() {
       <ConfirmModal
         open={!!confirmId}
         title={confirmTutor?.active ? 'Deactivate Tutor' : 'Activate Tutor'}
-        message={
-          confirmTutor?.active
-            ? `Are you sure you want to deactivate ${confirmTutor?.name}? They will no longer be able to log in to the tutor app.`
-            : `Are you sure you want to activate ${confirmTutor?.name}? They will be able to log in to the tutor app.`
+        message={confirmTutor?.active
+          ? `Are you sure you want to deactivate ${confirmTutor?.name}? They will no longer be able to log in.`
+          : `Are you sure you want to activate ${confirmTutor?.name}? They will be able to log in to the tutor app.`
         }
         confirmLabel={confirmTutor?.active ? 'Deactivate' : 'Activate'}
         confirmVariant={confirmTutor?.active ? 'danger' : 'success'}
@@ -319,6 +375,7 @@ export default function TutorsPage() {
 
       {addOpen && <TutorFormModal onClose={() => setAddOpen(false)} />}
       {editId  && <TutorFormModal tutorId={editId} onClose={() => setEditId(null)} />}
+      {viewId  && <TutorViewModal tutorId={viewId} onClose={() => setViewId(null)} />}
     </div>
   )
 }
