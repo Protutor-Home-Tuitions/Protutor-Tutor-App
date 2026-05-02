@@ -79,14 +79,14 @@ export default function ParentsPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {['Parent Name','Phone (Username)','Password','Students','Status','Created','Actions'].map((h) => (
+              {['Parent Name','Phone (Username)', ...(isManager ? ['Password'] : []), 'Students','Status','Created','Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0
-              ? <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400 text-sm">No parents found</td></tr>
+              ? <tr><td colSpan={isManager ? 7 : 6} className="px-4 py-12 text-center text-slate-400 text-sm">No parents found</td></tr>
               : filtered.map((p) => {
                   const active = p.tuitions.filter((t) => t.active).length
                   const pass   = parentLoginPass(p.parentName, p.passDigits)
@@ -96,20 +96,22 @@ export default function ParentsPage() {
                     <tr key={p.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-semibold text-sm">{p.parentName}</td>
                       <td className="px-4 py-3 text-sm font-mono text-slate-600">{p.parentPhone}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs px-2 py-1 rounded"
-                            style={{ background: showing ? '#EBF1FF' : '#F1F5F9', color: showing ? '#1A56DB' : '#475569', fontFamily: 'monospace' }}>
-                            {showing ? pass : '••••••••'}
-                          </code>
-                          <button onClick={() => setShowPassId(showing ? null : p.id)}
-                            className="text-slate-400 hover:text-slate-600">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
+                      {isManager && (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <code className="text-xs px-2 py-1 rounded"
+                              style={{ background: showing ? '#EBF1FF' : '#F1F5F9', color: showing ? '#1A56DB' : '#475569', fontFamily: 'monospace' }}>
+                              {showing ? pass : '••••••••'}
+                            </code>
+                            <button onClick={() => setShowPassId(showing ? null : p.id)}
+                              className="text-slate-400 hover:text-slate-600">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{active} active</span>
                         <span className="text-xs text-slate-400 ml-1">{p.tuitions.length} total</span>
