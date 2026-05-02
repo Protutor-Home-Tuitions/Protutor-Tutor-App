@@ -17,7 +17,14 @@ const PORT = process.env.PORT || 4000
 
 // ── CORS — allow all origins (restrict after confirming deployment works) ──
 app.use(cors({
-  origin: true,
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'https://panel.protutor.co.in',
+    'https://attendance.protutor.co.in',
+    process.env.FRONTEND_URL,
+  ].filter(Boolean),
   credentials: true,
 }))
 
