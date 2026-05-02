@@ -49,7 +49,7 @@ export default function AttendanceTab({ tuitionId }) {
   const billings = billingsMap[enqId] || []
 
   useEffect(() => {
-    if (enqId && !attMap[enqId]) fetchDetail(enqId)
+    if (enqId) fetchDetail(enqId)
   }, [enqId])
 
   const months   = useMemo(() => buildMonthList(t?.start, allAtt), [t?.start, allAtt])
