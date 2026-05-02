@@ -25,13 +25,15 @@ const DURATIONS = [
   { value: '3',   label: '3+ hr' },
 ]
 
-export default function AddAttModal({ tuitionId, existingRecord, allAtt, onClose, defaultMonth, onSaved }) {
+export default function AddAttModal({ tuitionId, tutorId, existingRecord, allAtt, onClose, defaultMonth, onSaved }) {
   const tuitions   = useDataStore((s) => s.tuitions)
   const fetchDetail = useDataStore((s) => s.fetchTuitionDetail)
   const user        = useAuthStore((s) => s.user)
 
   const t      = tuitions.find((t) => t.id === tuitionId)
   const enqId  = t?.enqId
+  // Use prop tutorId first, fall back to t.tutorId
+  const resolvedTutorId = tutorId ?? t?.tutorId ?? null
   const isEdit = !!existingRecord
 
   // Parse existing time "4:00 PM" into parts
@@ -67,7 +69,6 @@ export default function AddAttModal({ tuitionId, existingRecord, allAtt, onClose
     }
 
     setSaving(true)
-    console.log('DEBUG tuition:', t, 'enqId:', enqId, 'tutorId:', t?.tutorId)
     const time = `${hour}:${minute} ${ampm}`
     const monthKey = date.slice(0, 7)
     const payload = {
@@ -83,7 +84,7 @@ export default function AddAttModal({ tuitionId, existingRecord, allAtt, onClose
         await api.updateAttendance(existingRecord.id, payload)
       } else {
         payload.id = crypto.randomUUID()
-        payload.tutorId = t?.tutorId || null
+        payload.tutorId = resolvedTutorId
         await api.createAttendance(payload)
       }
       // Refresh attendance data for this tuition

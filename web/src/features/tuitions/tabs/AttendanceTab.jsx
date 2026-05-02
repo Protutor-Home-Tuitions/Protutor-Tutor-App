@@ -244,6 +244,7 @@ export default function AttendanceTab({ tuitionId }) {
       {addModalOpen && (
         <AddAttModal
           tuitionId={tuitionId}
+          tutorId={t?.tutorId}
           existingRecord={editingAtt}
           allAtt={allAtt}
           onClose={() => { setAddModalOpen(false); setEditingAtt(null) }}
