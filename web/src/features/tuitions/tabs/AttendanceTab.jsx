@@ -23,7 +23,7 @@ function buildMonthList(startDate, attendance) {
   return [...monthSet].sort((a,b) => b.localeCompare(a))
 }
 
-export default function AttendanceTab({ tuitionId }) {
+export default function AttendanceTab({ tuitionId, tutorId }) {
   const [activeMonth,  setActiveMonth]  = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editingAtt,   setEditingAtt]   = useState(null)
@@ -244,7 +244,7 @@ export default function AttendanceTab({ tuitionId }) {
       {addModalOpen && (
         <AddAttModal
           tuitionId={tuitionId}
-          tutorId={t?.tutorId}
+          tutorId={tutorId ?? t?.tutorId ?? null}
           existingRecord={editingAtt}
           allAtt={allAtt}
           onClose={() => { setAddModalOpen(false); setEditingAtt(null) }}

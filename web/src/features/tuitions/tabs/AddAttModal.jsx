@@ -32,8 +32,8 @@ export default function AddAttModal({ tuitionId, tutorId, existingRecord, allAtt
 
   const t      = tuitions.find((t) => t.id === tuitionId)
   const enqId  = t?.enqId
-  // Use prop tutorId first, fall back to t.tutorId
   const resolvedTutorId = tutorId ?? t?.tutorId ?? null
+  console.log('AddAttModal tutorId prop:', tutorId, 'resolved:', resolvedTutorId)
   const isEdit = !!existingRecord
 
   // Parse existing time "4:00 PM" into parts

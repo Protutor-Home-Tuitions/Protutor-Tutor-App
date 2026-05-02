@@ -112,7 +112,7 @@ export default function TuitionDetailModal({ tuitionId, onClose }) {
 
         {/* Tab content */}
         {activeTab === 'details'    && <DetailsTab tuition={t} tutor={tutor} />}
-        {activeTab === 'attendance' && <AttErrorBoundary><AttendanceTab tuitionId={tuitionId} /></AttErrorBoundary>}
+        {activeTab === 'attendance' && <AttErrorBoundary><AttendanceTab tuitionId={tuitionId} tutorId={t?.tutorId || tutor?.id || null} /></AttErrorBoundary>}
         {activeTab === 'payments'   && <PaymentsTab tuitionId={tuitionId} />}
       </Modal>
 
