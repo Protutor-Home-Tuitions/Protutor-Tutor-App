@@ -2,7 +2,7 @@
  * TuitionFormModal — Add or Edit a tuition.
  * Migrated from admin_1.html addTuition/updateTuition forms.
  */
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
 import Modal from '@/components/ui/Modal'
@@ -39,6 +39,26 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
   const [feeType,      setFeeType]      = useState(existing?.feeType      || 'Monthly')
   const [repeatPayment,setRepeatPayment]= useState(existing?.repeatPayment|| false)
   const [tutorId,      setTutorId]      = useState(existing?.tutorId      || '')
+  const [tutorSearch,  setTutorSearch]  = useState(() => {
+    if (existing?.tutorId) {
+      const t = tutors.find((t) => t.id === existing.tutorId)
+      return t ? `${t.name} — ${t.phone}` : ''
+    }
+    return ''
+  })
+  const [showTutorList, setShowTutorList] = useState(false)
+  const tutorRef = useRef(null)
+
+  // Close tutor dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e) {
+      if (tutorRef.current && !tutorRef.current.contains(e.target)) {
+        setShowTutorList(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
   const [demo,         setDemo]         = useState(existing?.demo         || '')
   const [start,        setStart]        = useState(existing?.start        || '')
   const [enqId, setEnqId] = useState(existing?.enqId || '')
@@ -181,13 +201,66 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
                 {BOARDS.map((b) => <option key={b}>{b}</option>)}
               </select>
             </div>
-            <div>
+            <div className="col-span-3">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tutor</label>
-              <select value={tutorId} onChange={(e) => setTutorId(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                <option value="">Unassigned</option>
-                {activeTutors.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              <div className="relative" ref={tutorRef}>
+                <input
+                  type="text"
+                  value={tutorSearch}
+                  onChange={(e) => {
+                    setTutorSearch(e.target.value)
+                    setTutorId('')
+                    setShowTutorList(true)
+                  }}
+                  onFocus={() => setShowTutorList(true)}
+                  placeholder="Search by name or phone..."
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {/* Selected tutor badge */}
+                {tutorId && (
+                  <button
+                    type="button"
+                    onClick={() => { setTutorId(''); setTutorSearch(''); setShowTutorList(false) }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 text-lg leading-none"
+                  >×</button>
+                )}
+                {/* Dropdown list */}
+                {showTutorList && tutorSearch && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {(() => {
+                      const q = tutorSearch.toLowerCase()
+                      const matches = activeTutors.filter((t) =>
+                        t.name.toLowerCase().includes(q) || t.phone.includes(q)
+                      )
+                      if (matches.length === 0) return (
+                        <div className="px-4 py-3 text-sm text-slate-400">No tutors found</div>
+                      )
+                      return matches.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setTutorId(t.id)
+                            setTutorSearch(`${t.name} — ${t.phone}`)
+                            setShowTutorList(false)
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center justify-between border-b border-slate-100 last:border-0"
+                        >
+                          <span className="font-medium text-slate-700">{t.name}</span>
+                          <span className="text-xs text-slate-400 font-mono">{t.phone}</span>
+                        </button>
+                      ))
+                    })()}
+                    <button
+                      type="button"
+                      onClick={() => { setTutorId(''); setTutorSearch(''); setShowTutorList(false) }}
+                      className="w-full text-left px-4 py-2.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100"
+                    >
+                      Clear / Unassigned
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -230,7 +303,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="grid grid-cols-3 gap-3 mt-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Demo Date</label>
               <input type="date" value={demo} onChange={(e) => setDemo(e.target.value)}
@@ -240,6 +313,17 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Start Date</label>
               <input type="date" value={start} onChange={(e) => setStart(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Start Month
+                <span className="text-slate-300 font-normal normal-case ml-1">(auto)</span>
+              </label>
+              <input
+                readOnly
+                value={start ? new Date(start + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : '—'}
+                className="w-full border border-slate-100 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
+              />
             </div>
           </div>
         </div>

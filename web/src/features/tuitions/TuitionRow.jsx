@@ -35,7 +35,14 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
   const lastAtt = tAtt[0] || null
 
   function LastAttCell() {
-    if (!lastAtt) return <span className="text-xs text-slate-400">Never</span>
+    if (!lastAtt) {
+      return (
+        <div className={`flex items-center gap-1.5 ${t.active ? 'text-red-700' : 'text-slate-400'}`}>
+          {t.active && WARN_ICON}
+          <span className="text-xs font-semibold">{t.active ? 'Never' : 'Never'}</span>
+        </div>
+      )
+    }
     const lastDate = new Date(lastAtt.date + 'T00:00:00')
     const diffDays = Math.floor((today - lastDate) / 86400000)
     const lastFmt  = `${String(lastDate.getDate()).padStart(2, '0')} ${lastDate.toLocaleString('en-IN', { month: 'short' })}`
