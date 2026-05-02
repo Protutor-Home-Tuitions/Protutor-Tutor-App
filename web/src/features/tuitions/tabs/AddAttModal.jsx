@@ -82,7 +82,7 @@ export default function AddAttModal({ tuitionId, existingRecord, allAtt, onClose
         await api.updateAttendance(existingRecord.id, payload)
       } else {
         payload.id = crypto.randomUUID()
-        payload.tutorId = null
+        payload.tutorId = t?.tutorId || null
         await api.createAttendance(payload)
       }
       // Refresh attendance data for this tuition
