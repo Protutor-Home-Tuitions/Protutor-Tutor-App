@@ -67,6 +67,7 @@ export default function AddAttModal({ tuitionId, existingRecord, allAtt, onClose
     }
 
     setSaving(true)
+    console.log('DEBUG tuition:', t, 'enqId:', enqId, 'tutorId:', t?.tutorId)
     const time = `${hour}:${minute} ${ampm}`
     const monthKey = date.slice(0, 7)
     const payload = {
