@@ -5,12 +5,21 @@ import { requireAuth, requireCanWrite, requireManager } from '../middleware/auth
 const router = Router()
 
 router.get('/', requireAuth, async (_req, res) => {
-  res.json(await prisma.tutor.findMany({ orderBy: { name: 'asc' } }))
+  try {
+    res.json(await prisma.tutor.findMany({ orderBy: { name: 'asc' } }))
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
-router.post('/', requireAuth, requireManager, async (req, res) => {
-  const tutor = await prisma.tutor.create({ data: req.body })
-  res.status(201).json(tutor)
+router.post('/', requireAuth, requireCanWrite, async (req, res) => {
+  try {
+    const tutor = await prisma.tutor.create({ data: req.body })
+    res.status(201).json(tutor)
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(409).json({ error: 'Phone number already exists.' })
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 router.patch('/:id', requireAuth, requireManager, async (req, res) => {

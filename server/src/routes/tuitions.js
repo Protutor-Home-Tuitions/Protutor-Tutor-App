@@ -56,20 +56,22 @@ router.get('/:id', requireAuth, async (req, res) => {
 })
 
 // POST /api/tuitions
-router.post('/', requireAuth, requireCanWrite, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
+    if (!['manager', 'coordinator'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
     const tuition = await prisma.tuition.create({
       data: { ...req.body, createdBy: req.user.name, createdAt: new Date() },
     })
     res.status(201).json(tuition)
   } catch (err) {
-    console.error(err)
     res.status(500).json({ error: 'Server error' })
   }
 })
 
-// PATCH /api/tuitions/:id
-router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
+// PATCH /api/tuitions/:id — manager only (edit + deactivate)
+router.patch('/:id', requireAuth, requireManager, async (req, res) => {
   try {
     const tuition = await prisma.tuition.update({
       where: { id: req.params.id },

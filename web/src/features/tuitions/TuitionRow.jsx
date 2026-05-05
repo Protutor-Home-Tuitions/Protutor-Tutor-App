@@ -16,7 +16,7 @@ const WARN_ICON = (
   </svg>
 )
 
-export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onToggle }) {
+export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onToggle, isManager }) {
   const tutors     = useDataStore((s) => s.tutors)
   const attendance = useDataStore((s) => s.attendance[t.enqId] || [])
 
@@ -163,14 +163,16 @@ function ActionMenu({ tuition, onView, onEdit, onToggle }) {
       </button>
       <div className="hidden absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-32 overflow-hidden">
         <button onClick={onView} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
-        <button onClick={onEdit} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
-        <button
-          onClick={onToggle}
-          className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
-          style={{ color: tuition.active ? '#DC2626' : '#15803D' }}
-        >
-          {tuition.active ? 'Deactivate' : 'Activate'}
-        </button>
+        {isManager && <>
+          <button onClick={onEdit} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
+          <button
+            onClick={onToggle}
+            className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
+            style={{ color: t.active ? '#DC2626' : '#15803D' }}
+          >
+            {t.active ? 'Deactivate' : 'Activate'}
+          </button>
+        </>}
       </div>
     </div>
   )

@@ -61,7 +61,7 @@ export default function TuitionDetailModal({ tuitionId, onClose }) {
         footer={
           <>
             <Button variant="secondary" onClick={onClose}>Close</Button>
-            {canWrite && <Button variant="secondary" onClick={() => setEditOpen(true)}>✏ Edit</Button>}
+            {isManager && <Button variant="secondary" onClick={() => setEditOpen(true)}>✏ Edit</Button>}
             {isManager && (
               <Button variant={t.active ? 'danger' : 'success'} onClick={handleToggle}>
                 {t.active ? 'Deactivate Tuition' : 'Activate Tuition'}

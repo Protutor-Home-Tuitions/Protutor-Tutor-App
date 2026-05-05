@@ -245,19 +245,9 @@ export default function TutorsPage() {
   const updateTutor = useDataStore((s) => s.updateTutor)
   const user        = useAuthStore((s) => s.user)
   const isManager   = user?.role === 'manager'
-  const canAdd      = isManager || user?.role === 'coordinator'
-
-  // City filter — manager sees all, others see tutors from their assigned cities only
-  // A tutor belongs to a city if they have active tuitions in that city
-  const cityAllowed = (tutorId) => {
-    if (isManager) return true
-    if (!user?.cities?.length) return true
-    // Check if tutor has any tuition in allowed cities
-    return tuitions.some((tu) => tu.tutorId === tutorId && user.cities.includes(tu.city))
-  }
+  const canAdd = isManager || user?.role === 'coordinator'
 
   const filtered = tutors.filter((t) => {
-    if (!cityAllowed(t.id)) return false
     if (!search) return true
     const q = search.toLowerCase()
     return t.name.toLowerCase().includes(q) || t.phone.includes(q)

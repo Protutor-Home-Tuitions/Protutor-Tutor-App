@@ -28,7 +28,7 @@ export default function TuitionsPage() {
   const user           = useAuthStore((s) => s.user)
   const isManager      = user?.role === 'manager'
   const isCoordinator  = user?.role === 'coordinator'
-  const canWrite       = isManager || isCoordinator
+  const canWrite      = isManager || isCoordinator
 
   const cityAllowed = (city) => {
     if (!user) return false
@@ -123,6 +123,7 @@ export default function TuitionsPage() {
                 <tr><td colSpan={HEADERS.length} className="px-4 py-16 text-center text-slate-400 text-sm">No tuitions found</td></tr>
               ) : filtered.map((t) => (
                 <TuitionRow key={t.id} tuition={t} prevMonth={prevMonth}
+                  isManager={isManager}
                   onView={(id) => setDetailId(id)}
                   onEdit={(id) => setEditId(id)}
                   onToggle={handleToggle}
