@@ -137,6 +137,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <ActionMenu
           tuition={t}
+          isManager={isManager}
           onView={() => onView(t.id)}
           onEdit={() => onEdit(t.id)}
           onToggle={() => onToggle(t.id, t.active ? 'deactivate' : 'activate')}
@@ -146,7 +147,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
   )
 }
 
-function ActionMenu({ tuition, onView, onEdit, onToggle }) {
+function ActionMenu({ tuition, onView, onEdit, onToggle, isManager }) {
   return (
     <div className="relative group">
       <button
@@ -168,9 +169,9 @@ function ActionMenu({ tuition, onView, onEdit, onToggle }) {
           <button
             onClick={onToggle}
             className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
-            style={{ color: t.active ? '#DC2626' : '#15803D' }}
+            style={{ color: tuition.active ? '#DC2626' : '#15803D' }}
           >
-            {t.active ? 'Deactivate' : 'Activate'}
+            {tuition.active ? 'Deactivate' : 'Activate'}
           </button>
         </>}
       </div>

@@ -41,8 +41,8 @@ npm run dev
 - API server → http://localhost:4000
 
 ### Login
-- Phone: `9042120201`
-- Password: `provig@201`
+- Phone: 
+- Password: 
 
 ---
 
