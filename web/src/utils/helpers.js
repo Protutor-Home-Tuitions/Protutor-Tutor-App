@@ -1,6 +1,6 @@
 export const MN_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December']
 export const MN_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-export const ALL_CITIES = ['Bangalore', 'Chennai', 'Mumbai', 'Others']
+export const ALL_CITIES = ['Bangalore', 'Chennai', 'Mumbai', 'Hyderabad', 'Pune', 'Others']
 export const ROLE_LABELS = { manager: 'Manager (Admin)', coordinator: 'Coordinator', support: 'Support' }
 export const BOARDS = ['CBSE', 'ICSE', 'State', 'IB', 'IGCSE']
 export const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']

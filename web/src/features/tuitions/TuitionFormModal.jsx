@@ -9,7 +9,7 @@ import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { ALL_CITIES, BOARDS, DAYS_OF_WEEK } from '@/utils/helpers'
 
-const SUBJECTS = ['Mathematics','Physics','Chemistry','Biology','English','Social','Science','Hindi','Tamil','Computer Science','Economics','Accountancy']
+const SUBJECTS = ['Mathematics','Physics','Chemistry','Biology','English','Social','Science','EVS','Hindi','Tamil','Kannada','Marathi','Telugu','Computer Science','Economics','Accountancy','Phonics','Others']
 const FEE_TYPES = ['Monthly','Session','Hourly']
 const STANDARDS = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th']
 const DURATIONS = ['0.5','1','1.5','2','2.5','3']
@@ -348,6 +348,10 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fee (Tutor) ₹ <span className="text-red-500">*</span></label>
               <input type="number" value={feeTutor} onChange={(e) => setFeeTutor(e.target.value)} placeholder="e.g. 3000"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                Tutor sees this as their fee
+              </p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Commission ₹</label>
