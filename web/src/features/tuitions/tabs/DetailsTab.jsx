@@ -48,7 +48,7 @@ export default function DetailsTab({ tuition: t, tutor }) {
           <VCell label="Fee (Parent)"   value={`₹${t.feeParent}/${t.feeType}`} />
           <VCell label="Fee (Tutor)"    value={`₹${t.feeTutor}/${t.feeType}`} />
           <VCell label="Fee (Company)"  value={`₹${feeCompany}/${t.feeType}`} />
-          <VCell label="Commission"     value={t.commission ? `₹${t.commission}` : '—'} />
+          <VCell label="One-Time Fee"     value={t.commission ? `₹${t.commission}` : '—'} />
           <VCell label="Repeat"         value={t.repeatPayment ? '↻ Yes — Repeat' : 'No'} />
           <VCell label="Fee Type"       value={t.feeType} />
         </div>

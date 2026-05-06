@@ -354,7 +354,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               </p>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Commission ₹</label>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">One-Time Fee ₹</label>
               <input type="number" value={commission} onChange={(e) => setCommission(e.target.value)} placeholder="e.g. 1500"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
