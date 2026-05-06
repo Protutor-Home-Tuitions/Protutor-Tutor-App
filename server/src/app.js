@@ -15,18 +15,28 @@ dotenv.config()
 const app  = express()
 const PORT = process.env.PORT || 4000
 
-// ── CORS — allow all origins (restrict after confirming deployment works) ──
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'https://panel.protutor.co.in',
+  'https://attendance.protutor.co.in',
+  process.env.FRONTEND_URL,
+].filter(Boolean)
+
+// ── CORS ──
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'https://panel.protutor.co.in',
-    'https://attendance.protutor.co.in',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    callback(null, false)
+  },
   credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
 }))
+
+// Handle preflight for all routes
+app.options('*', cors())
 
 app.use(express.json())
 
