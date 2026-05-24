@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
 import TuitionRow from './TuitionRow'
@@ -20,16 +20,29 @@ export default function TuitionsPage() {
   const [filter,        setFilter]        = useState('all')
   const [cityFilter,    setCityFilter]    = useState('')
   const [detailId,      setDetailId]      = useState(null)
-  const [editId,        setEditId]        = useState(null)   // tuition UUID being edited
-  const [addOpen,       setAddOpen]       = useState(false)  // add tuition modal
-  const [openMenuId,    setOpenMenuId]    = useState(null)   // which actions menu is open
+  const [editId,        setEditId]        = useState(null)
+  const [addOpen,       setAddOpen]       = useState(false)
+  const [openMenuId,    setOpenMenuId]    = useState(null)
+  const [confirmToggle, setConfirmToggle] = useState(null) // { tuitionId, action, studentName }
+  const [toggling,      setToggling]      = useState(false)
 
   const tuitions       = useDataStore((s) => s.tuitions)
+  const fetchDetail    = useDataStore((s) => s.fetchTuitionDetail)
   const updateTuition  = useDataStore((s) => s.updateTuition)
+  const attendance     = useDataStore((s) => s.attendance)
   const user           = useAuthStore((s) => s.user)
   const isManager      = user?.role === 'manager'
   const isCoordinator  = user?.role === 'coordinator'
-  const canWrite      = isManager || isCoordinator
+  const canWrite       = isManager || isCoordinator
+
+  // Fetch attendance for all visible tuitions so Last Att column works
+  useEffect(() => {
+    tuitions.forEach((t) => {
+      if (t.enqId && !attendance[t.enqId]) {
+        fetchDetail(t.enqId)
+      }
+    })
+  }, [tuitions.length])
 
   const cityAllowed = (city) => {
     if (!user) return false
@@ -57,14 +70,22 @@ export default function TuitionsPage() {
     return true
   }), [tuitions, search, filter, cityFilter, user])
 
-  async function handleToggle(tuitionId, action) {
+  function handleToggle(tuitionId, action) {
     const t = tuitions.find((t) => t.id === tuitionId)
     if (!t) return
-    if (!window.confirm(`${action === 'deactivate' ? 'Deactivate' : 'Activate'} tuition for ${t.studentName}?`)) return
+    setConfirmToggle({ tuitionId, action, studentName: t.studentName })
+  }
+
+  async function handleToggleConfirm() {
+    if (!confirmToggle) return
+    setToggling(true)
     try {
-      await updateTuition(tuitionId, { active: action === 'activate' })
+      await updateTuition(confirmToggle.tuitionId, { active: confirmToggle.action === 'activate' })
+      setConfirmToggle(null)
     } catch (err) {
       alert('Failed to update tuition: ' + err.message)
+    } finally {
+      setToggling(false)
     }
   }
 
@@ -157,6 +178,43 @@ export default function TuitionsPage() {
           onClose={() => setEditId(null)}
           onSaved={() => setEditId(null)}
         />
+      )}
+
+      {/* Inline confirm modal for activate/deactivate */}
+      {confirmToggle && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setConfirmToggle(null)}>
+          <div style={{ background:'white', borderRadius:16, padding:24, maxWidth:380, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ width:44, height:44, borderRadius:12, background: confirmToggle.action === 'deactivate' ? '#FEE2E2' : '#DCFCE7', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={confirmToggle.action === 'deactivate' ? '#DC2626' : '#16A34A'} strokeWidth="2.2" strokeLinecap="round">
+                {confirmToggle.action === 'deactivate'
+                  ? <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>
+                  : <><circle cx="12" cy="12" r="10"/><path d="M9 11l3 3L22 4"/></>
+                }
+              </svg>
+            </div>
+            <p style={{ fontSize:16, fontWeight:700, color:'#0F172A', marginBottom:6 }}>
+              {confirmToggle.action === 'deactivate' ? 'Deactivate' : 'Activate'} Tuition?
+            </p>
+            <p style={{ fontSize:13, color:'#475569', lineHeight:1.6, marginBottom:20 }}>
+              {confirmToggle.action === 'deactivate'
+                ? `This will deactivate the tuition for ${confirmToggle.studentName}. Attendance can no longer be marked.`
+                : `This will activate the tuition for ${confirmToggle.studentName}.`
+              }
+            </p>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setConfirmToggle(null)} disabled={toggling}
+                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'1.5px solid #E2E8F0', background:'white', color:'#475569', fontSize:14, fontWeight:500, cursor:'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={handleToggleConfirm} disabled={toggling}
+                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'none', background: confirmToggle.action === 'deactivate' ? '#DC2626' : '#16A34A', color:'white', fontSize:14, fontWeight:600, cursor:'pointer', opacity: toggling ? 0.7 : 1 }}>
+                {toggling ? 'Updating…' : confirmToggle.action === 'deactivate' ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

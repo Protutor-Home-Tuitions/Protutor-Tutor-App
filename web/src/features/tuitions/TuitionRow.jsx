@@ -47,7 +47,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
     const lastDate = new Date(lastAtt.date + 'T00:00:00')
     const diffDays = Math.floor((today - lastDate) / 86400000)
     const lastFmt  = `${String(lastDate.getDate()).padStart(2, '0')} ${lastDate.toLocaleString('en-IN', { month: 'short' })}`
-    const isLate   = diffDays > 5 && t.active
+    const isLate   = diffDays > 4 && t.active
 
     return (
       <div className={`flex items-center gap-1.5 ${isLate ? 'text-red-700' : 'text-slate-600'}`}>
