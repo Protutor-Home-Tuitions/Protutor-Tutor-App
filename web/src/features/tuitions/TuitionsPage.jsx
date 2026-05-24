@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
+import { api } from '@/lib/api'
 import TuitionRow from './TuitionRow'
 import TuitionDetailModal from './TuitionDetailModal'
 import TuitionFormModal from './TuitionFormModal'
@@ -27,7 +28,6 @@ export default function TuitionsPage() {
   const [toggling,      setToggling]      = useState(false)
 
   const tuitions       = useDataStore((s) => s.tuitions)
-  const fetchDetail    = useDataStore((s) => s.fetchTuitionDetail)
   const updateTuition  = useDataStore((s) => s.updateTuition)
   const attendance     = useDataStore((s) => s.attendance)
   const user           = useAuthStore((s) => s.user)
@@ -35,13 +35,27 @@ export default function TuitionsPage() {
   const isCoordinator  = user?.role === 'coordinator'
   const canWrite       = isManager || isCoordinator
 
-  // Fetch attendance for all visible tuitions so Last Att column works
+  // Fetch attendance only (lightweight) for all tuitions to populate Last Att column
   useEffect(() => {
-    tuitions.forEach((t) => {
-      if (t.enqId && !attendance[t.enqId]) {
-        fetchDetail(t.enqId)
+    const toFetch = tuitions.filter((t) => t.enqId && attendance[t.enqId] === undefined)
+    if (!toFetch.length) return
+
+    async function fetchAttOnly() {
+      for (let i = 0; i < toFetch.length; i += 8) {
+        const batch = toFetch.slice(i, i + 8)
+        await Promise.allSettled(
+          batch.map(async (t) => {
+            try {
+              const rows = await api.getAttendance(t.enqId)
+              useDataStore.setState((s) => ({
+                attendance: { ...s.attendance, [t.enqId]: rows }
+              }))
+            } catch { /* silent */ }
+          })
+        )
       }
-    })
+    }
+    fetchAttOnly()
   }, [tuitions.length])
 
   const cityAllowed = (city) => {
