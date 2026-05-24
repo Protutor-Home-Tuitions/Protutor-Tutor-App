@@ -38,7 +38,7 @@ async function sendWatiTemplate(phone, templateName, parameters) {
 
 router.get('/', requireAuth, async (_req, res) => {
   try {
-    res.json(await prisma.tutor.findMany({ orderBy: { createdAt: 'desc' } }))
+    res.json(await prisma.tutor.findMany({ orderBy: { id: 'desc' } }))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
