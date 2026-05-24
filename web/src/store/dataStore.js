@@ -112,6 +112,16 @@ export const useDataStore = create((set, get) => ({
     return user
   },
 
+  deleteAttendance: async (enqId, attId) => {
+    await api.deleteAttendance(attId)
+    set((s) => ({
+      attendance: {
+        ...s.attendance,
+        [enqId]: (s.attendance[enqId] || []).filter((a) => a.id !== attId),
+      },
+    }))
+  },
+
   getAttendanceFor: (enqId) => get().attendance[enqId] || [],
   getBillingsFor:   (enqId) => get().billings[enqId]   || [],
   getPaymentsFor:   (enqId) => get().payments[enqId]   || [],
