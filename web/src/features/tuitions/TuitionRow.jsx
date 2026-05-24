@@ -17,7 +17,7 @@ const WARN_ICON = (
   </svg>
 )
 
-export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onToggle, isManager }) {
+export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onToggle, isManager, openMenuId, onToggleMenu }) {
   const tutors     = useDataStore((s) => s.tutors)
   const attendance = useDataStore((s) => s.attendance[t.enqId] || [])
 
@@ -139,6 +139,8 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
         <ActionMenu
           tuition={t}
           isManager={isManager}
+          open={openMenuId === t.id}
+          onToggleOpen={(id) => onToggleMenu(id === openMenuId ? null : id)}
           onView={() => onView(t.id)}
           onEdit={() => onEdit(t.id)}
           onToggle={() => onToggle(t.id, t.active ? 'deactivate' : 'activate')}
@@ -148,13 +150,10 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
   )
 }
 
-function ActionMenu({ tuition, onView, onEdit, onToggle, isManager }) {
-  const [open, setOpen] = useState(false)
-
+function ActionMenu({ tuition, onView, onEdit, onToggle, isManager, open, onToggleOpen }) {
   useEffect(() => {
     if (!open) return
-    function handleClick() { setOpen(false) }
-    // Use setTimeout so the current click event finishes first
+    function handleClick() { onToggleOpen(null) }
     const timer = setTimeout(() => {
       document.addEventListener('click', handleClick)
     }, 0)
@@ -168,7 +167,7 @@ function ActionMenu({ tuition, onView, onEdit, onToggle, isManager }) {
     <div className="relative">
       <button
         className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
+        onClick={(e) => { e.stopPropagation(); onToggleOpen(tuition.id) }}
       >
         Actions
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -177,11 +176,11 @@ function ActionMenu({ tuition, onView, onEdit, onToggle, isManager }) {
       </button>
       {open && (
         <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-32 overflow-hidden">
-          <button onClick={() => { setOpen(false); onView() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
+          <button onClick={() => { onToggleOpen(null); onView() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
           {isManager && <>
-            <button onClick={() => { setOpen(false); onEdit() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
+            <button onClick={() => { onToggleOpen(null); onEdit() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
             <button
-              onClick={() => { setOpen(false); onToggle() }}
+              onClick={() => { onToggleOpen(null); onToggle() }}
               className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
               style={{ color: tuition.active ? '#DC2626' : '#15803D' }}
             >

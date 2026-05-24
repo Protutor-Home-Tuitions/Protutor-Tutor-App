@@ -22,6 +22,7 @@ export default function TuitionsPage() {
   const [detailId,      setDetailId]      = useState(null)
   const [editId,        setEditId]        = useState(null)   // tuition UUID being edited
   const [addOpen,       setAddOpen]       = useState(false)  // add tuition modal
+  const [openMenuId,    setOpenMenuId]    = useState(null)   // which actions menu is open
 
   const tuitions       = useDataStore((s) => s.tuitions)
   const updateTuition  = useDataStore((s) => s.updateTuition)
@@ -124,6 +125,8 @@ export default function TuitionsPage() {
               ) : filtered.map((t) => (
                 <TuitionRow key={t.id} tuition={t} prevMonth={prevMonth}
                   isManager={isManager}
+                  openMenuId={openMenuId}
+                  onToggleMenu={setOpenMenuId}
                   onView={(id) => setDetailId(id)}
                   onEdit={(id) => setEditId(id)}
                   onToggle={handleToggle}
