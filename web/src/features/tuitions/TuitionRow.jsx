@@ -2,6 +2,7 @@
  * TuitionRow — one row in the tuitions table.
  * Migrated from admin_1.html renderTuitions() tr template.
  */
+import { useState, useEffect } from 'react'
 import { useDataStore } from '@/store/dataStore'
 import { fd, daysAgo, fmtMonthKey } from '@/utils/helpers'
 import Badge from '@/components/ui/Badge'
@@ -148,33 +149,41 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
 }
 
 function ActionMenu({ tuition, onView, onEdit, onToggle, isManager }) {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick() { setOpen(false) }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [open])
+
   return (
-    <div className="relative group">
+    <div className="relative">
       <button
         className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
-        onClick={(e) => {
-          e.stopPropagation()
-          e.currentTarget.nextSibling.classList.toggle('hidden')
-        }}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
       >
         Actions
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      <div className="hidden absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-32 overflow-hidden">
-        <button onClick={onView} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
-        {isManager && <>
-          <button onClick={onEdit} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
-          <button
-            onClick={onToggle}
-            className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
-            style={{ color: tuition.active ? '#DC2626' : '#15803D' }}
-          >
-            {tuition.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </>}
-      </div>
+      {open && (
+        <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-32 overflow-hidden">
+          <button onClick={() => { setOpen(false); onView() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
+          {isManager && <>
+            <button onClick={() => { setOpen(false); onEdit() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
+            <button
+              onClick={() => { setOpen(false); onToggle() }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
+              style={{ color: tuition.active ? '#DC2626' : '#15803D' }}
+            >
+              {tuition.active ? 'Deactivate' : 'Activate'}
+            </button>
+          </>}
+        </div>
+      )}
     </div>
   )
 }
