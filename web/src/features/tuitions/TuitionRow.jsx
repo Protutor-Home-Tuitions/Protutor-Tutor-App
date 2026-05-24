@@ -154,8 +154,14 @@ function ActionMenu({ tuition, onView, onEdit, onToggle, isManager }) {
   useEffect(() => {
     if (!open) return
     function handleClick() { setOpen(false) }
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
+    // Use setTimeout so the current click event finishes first
+    const timer = setTimeout(() => {
+      document.addEventListener('click', handleClick)
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('click', handleClick)
+    }
   }, [open])
 
   return (
