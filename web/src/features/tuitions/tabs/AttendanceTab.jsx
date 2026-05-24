@@ -37,6 +37,8 @@ export default function AttendanceTab({ tuitionId }) {
   const [activeMonth, setActiveMonth] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editingAtt, setEditingAtt] = useState(null)
+  const [deleteAtt, setDeleteAtt] = useState(null) // attendance record to delete
+  const [deleting,  setDeleting]  = useState(false)
 
   const tuitions       = useDataStore((s) => s.tuitions)
   const tutors         = useDataStore((s) => s.tutors)
@@ -45,6 +47,7 @@ export default function AttendanceTab({ tuitionId }) {
   const attCompletions = useDataStore((s) => s.attCompletions)
   const fetchDetail    = useDataStore((s) => s.fetchTuitionDetail)
   const { isManager, canWrite, isCoordinator } = useAuthStore()
+  const deleteAttendance = useDataStore((s) => s.deleteAttendance)
 
   const t     = tuitions.find((t) => t.id === tuitionId)
   const enqId = t?.enqId
@@ -166,12 +169,59 @@ export default function AttendanceTab({ tuitionId }) {
       </div>
 
       {/* Table */}
-      <AttTable rows={viewRows} tuition={t} onEdit={(a) => { setEditingAtt(a); setAddModalOpen(true) }} canWrite={canWrite()} />
+      <AttTable rows={viewRows} tuition={t}
+        onEdit={(a) => { setEditingAtt(a); setAddModalOpen(true) }}
+        onDelete={(a) => setDeleteAtt(a)}
+        canWrite={canWrite()}
+        isManager={isManager()}
+      />
 
       {addModalOpen && (
         <AddAttModal tuitionId={tuitionId} existingRecord={editingAtt} allAtt={allAtt}
           onClose={() => { setAddModalOpen(false); setEditingAtt(null) }}
           defaultMonth={monthKey} onSaved={(mk) => setActiveMonth(mk)} />
+      )}
+
+      {/* Delete confirmation */}
+      {deleteAtt && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setDeleteAtt(null)}>
+          <div style={{ background:'white', borderRadius:16, padding:24, maxWidth:380, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ width:44, height:44, borderRadius:12, background:'#FEE2E2', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+            </div>
+            <p style={{ fontSize:16, fontWeight:700, color:'#0F172A', marginBottom:6 }}>Delete Attendance Record?</p>
+            <p style={{ fontSize:13, color:'#475569', lineHeight:1.6, marginBottom:20 }}>
+              This will permanently delete the attendance for <strong>{fd(deleteAtt.date)}</strong> ({deleteAtt.subj}).
+              This action cannot be undone.
+            </p>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setDeleteAtt(null)} disabled={deleting}
+                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'1.5px solid #E2E8F0', background:'white', color:'#475569', fontSize:14, fontWeight:500, cursor:'pointer' }}>
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await deleteAttendance(enqId, deleteAtt.id)
+                    setDeleteAtt(null)
+                  } catch (err) {
+                    alert('Failed to delete: ' + err.message)
+                  } finally {
+                    setDeleting(false)
+                  }
+                }}
+                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'none', background: deleting ? '#FCA5A5' : '#DC2626', color:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -194,12 +244,11 @@ function BillingBtn({ activeBill, attSubmitted, newerBill, canCreate }) {
   )
 }
 
-function AttTable({ rows, tuition, onEdit, canWrite }) {
+function AttTable({ rows, tuition, onEdit, onDelete, canWrite, isManager }) {
   if (!rows.length) return (
     <div className="text-center py-10 text-slate-400 text-sm bg-white border border-slate-200 rounded-xl">No attendance recorded for this period.</div>
   )
-  const classDur = tuition ? String(tuition.duration) : ''
-  const cols = '100px 75px 90px 110px 1fr 140px 100px 1fr 36px'
+  const cols = '100px 75px 90px 110px 1fr 140px 100px 1fr 70px'
   const headers = ['Date','Time','Duration','Subject','Topic','Marked On','Marked By','Parent Comment','']
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
@@ -237,9 +286,12 @@ function AttTable({ rows, tuition, onEdit, canWrite }) {
             </div>
             <div className="px-3 py-2.5 text-xs text-slate-600">{a.markedBy || '—'}</div>
             <div className="px-3 py-2.5 text-xs">{a.parentComment ? <span className="text-blue-600">{a.parentComment}</span> : <span className="text-slate-300">—</span>}</div>
-            <div className="px-2 py-2.5">
+            <div className="px-2 py-2.5 flex items-center gap-1">
               {canWrite && <button onClick={() => onEdit(a)} className="p-1 text-slate-400 hover:text-blue-600" title="Edit">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>}
+              {isManager && <button onClick={() => onDelete(a)} className="p-1 text-slate-400 hover:text-red-500" title="Delete">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
               </button>}
             </div>
           </div>
