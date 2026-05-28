@@ -32,8 +32,8 @@ async function sendWatiTemplate(phone, templateName, parameters) {
 
 // Check if WATI should fire for attendance
 async function maybeNotifyAttendance(row, tuition, tutor) {
-  // Rule 3: only if marked by tutor (byAdmin === false)
-  if (row.byAdmin !== false) return
+  // Rule 3: only if marked by tutor (byAdmin is false or null, NOT true)
+  if (row.byAdmin === true) return
 
   // Rule 1: tuition must be active or idle
   const status = tuition.status || (tuition.active ? 'active' : 'inactive')
