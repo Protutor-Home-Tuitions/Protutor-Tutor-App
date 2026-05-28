@@ -70,8 +70,8 @@ router.post('/', requireAuth, async (req, res) => {
   }
 })
 
-// PATCH /api/tuitions/:id — manager only (edit + deactivate + idle)
-router.patch('/:id', requireAuth, requireManager, async (req, res) => {
+// PATCH /api/tuitions/:id — manager + coordinator (edit), manager only for deactivate/idle handled in frontend
+router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
   try {
     const body = { ...req.body }
     // Sync active boolean with status string

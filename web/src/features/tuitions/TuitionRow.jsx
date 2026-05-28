@@ -117,6 +117,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
           tuition={t}
           status={status}
           isManager={isManager}
+          canWrite={isManager || !isManager}
           open={openMenuId === t.id}
           onToggleOpen={(id) => onToggleMenu(id === openMenuId ? null : id)}
           onView={() => onView(t.id)}
@@ -128,7 +129,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
   )
 }
 
-function ActionMenu({ tuition, status, onView, onEdit, onToggle, isManager, open, onToggleOpen }) {
+function ActionMenu({ tuition, status, onView, onEdit, onToggle, isManager, canWrite, open, onToggleOpen }) {
   useEffect(() => {
     if (!open) return
     function handleClick() { onToggleOpen(null) }
@@ -151,9 +152,9 @@ function ActionMenu({ tuition, status, onView, onEdit, onToggle, isManager, open
         <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-36 overflow-hidden">
           <button onClick={() => { onToggleOpen(null); onView() }}
             className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
+          <button onClick={() => { onToggleOpen(null); onEdit() }}
+            className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
           {isManager && <>
-            <button onClick={() => { onToggleOpen(null); onEdit() }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
             {status !== 'active' && (
               <button onClick={() => { onToggleOpen(null); onToggle(tuition.id, 'activate') }}
                 className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100" style={{ color: '#15803D' }}>
