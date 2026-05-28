@@ -1,7 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
-import { api } from '@/lib/api'
 import TuitionRow from './TuitionRow'
 import TuitionDetailModal from './TuitionDetailModal'
 import TuitionFormModal from './TuitionFormModal'
@@ -14,49 +13,77 @@ function getPrevMonth() {
   return `${now.getFullYear()}-${String(now.getMonth()).padStart(2,'0')}`
 }
 
+const MN_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function formatStartDate(dateStr) {
+  if (!dateStr) return '—'
+  const [, m, d] = dateStr.split('-')
+  return `${MN_SHORT[parseInt(m)-1]}-${String(parseInt(d)).padStart(2,'0')}`
+}
+
+function exportToCSV(rows, tutors) {
+  const headers = [
+    'Start Date','Tuition Status','Enq ID','Student Name','Parent Name',
+    'Mobile Number','Standard & Board','Tutor Name','Tutor Number',
+    'No. of Days','Duration','Fee (Parent)','Repeat','Fee (Tutor)',
+    'Fee (Company)','One-Time Fee'
+  ]
+
+  const csvRows = rows.map((t) => {
+    const tutor = tutors.find((tu) => tu.id === t.tutorId)
+    const status = t.status || (t.active ? 'active' : 'inactive')
+    return [
+      formatStartDate(t.start),
+      status.charAt(0).toUpperCase() + status.slice(1),
+      t.enqId || '',
+      t.studentName || '',
+      t.parentName || '',
+      t.parentPhone || '',
+      `${t.standard || ''} ${t.board || ''}`.trim(),
+      tutor?.name || '',
+      tutor?.phone || '',
+      t.days?.length || '',
+      t.duration ? `${t.duration}hr` : '',
+      t.feeParent || '',
+      t.repeatPayment ? 'Yes' : 'No',
+      t.feeTutor || '',
+      t.feeCompany || '',
+      t.commission || '',
+    ]
+  })
+
+  const escape = (v) => `"${String(v).replace(/"/g, '""')}"`
+  const content = [
+    headers.map(escape).join(','),
+    ...csvRows.map((r) => r.map(escape).join(','))
+  ].join('\n')
+
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = `tuitions-${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const HEADERS = ['Enquiry','Start','Parent / Student','Std · Board','Schedule','Tutor','Fee / Type','Last Att','Status','Prev Month','Actions']
 
 export default function TuitionsPage() {
   const [search,        setSearch]        = useState('')
-  const [filter,        setFilter]        = useState('active')
+  const [filter,        setFilter]        = useState('all')
   const [cityFilter,    setCityFilter]    = useState('')
   const [detailId,      setDetailId]      = useState(null)
-  const [editId,        setEditId]        = useState(null)
-  const [addOpen,       setAddOpen]       = useState(false)
-  const [openMenuId,    setOpenMenuId]    = useState(null)
-  const [confirmToggle, setConfirmToggle] = useState(null) // { tuitionId, action, studentName }
-  const [toggling,      setToggling]      = useState(false)
+  const [editId,        setEditId]        = useState(null)   // tuition UUID being edited
+  const [addOpen,       setAddOpen]       = useState(false)  // add tuition modal
 
   const tuitions       = useDataStore((s) => s.tuitions)
+  const tutors         = useDataStore((s) => s.tutors)
   const updateTuition  = useDataStore((s) => s.updateTuition)
-  const attendance     = useDataStore((s) => s.attendance)
   const user           = useAuthStore((s) => s.user)
   const isManager      = user?.role === 'manager'
   const isCoordinator  = user?.role === 'coordinator'
   const canWrite       = isManager || isCoordinator
-
-  // Fetch attendance only (lightweight) for all tuitions to populate Last Att column
-  useEffect(() => {
-    const toFetch = tuitions.filter((t) => t.enqId && attendance[t.enqId] === undefined)
-    if (!toFetch.length) return
-
-    async function fetchAttOnly() {
-      for (let i = 0; i < toFetch.length; i += 8) {
-        const batch = toFetch.slice(i, i + 8)
-        await Promise.allSettled(
-          batch.map(async (t) => {
-            try {
-              const rows = await api.getAttendance(t.enqId)
-              useDataStore.setState((s) => ({
-                attendance: { ...s.attendance, [t.enqId]: rows }
-              }))
-            } catch { /* silent */ }
-          })
-        )
-      }
-    }
-    fetchAttOnly()
-  }, [tuitions.length])
 
   const cityAllowed = (city) => {
     if (!user) return false
@@ -67,12 +94,10 @@ export default function TuitionsPage() {
 
   const prevMonth = getPrevMonth()
 
-  const filtered = useMemo(() => [...tuitions].sort((a, b) => (b.start || '').localeCompare(a.start || '')).filter((t) => {
+  const filtered = useMemo(() => tuitions.filter((t) => {
     if (!cityAllowed(t.city || '')) return false
-    const tStatus = t.status || (t.active ? 'active' : 'inactive')
-    if (filter === 'active'   && tStatus !== 'active') return false
-    if (filter === 'inactive' && tStatus !== 'inactive') return false
-    if (filter === 'idle'     && tStatus !== 'idle') return false
+    if (filter === 'active'   && !t.active) return false
+    if (filter === 'inactive' &&  t.active) return false
     if (cityFilter && t.city !== cityFilter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -86,26 +111,14 @@ export default function TuitionsPage() {
     return true
   }), [tuitions, search, filter, cityFilter, user])
 
-  function handleToggle(tuitionId, action) {
+  async function handleToggle(tuitionId, action) {
     const t = tuitions.find((t) => t.id === tuitionId)
     if (!t) return
-    setConfirmToggle({ tuitionId, action, studentName: t.studentName })
-  }
-
-  async function handleToggleConfirm() {
-    if (!confirmToggle) return
-    setToggling(true)
+    if (!window.confirm(`${action === 'deactivate' ? 'Deactivate' : 'Activate'} tuition for ${t.studentName}?`)) return
     try {
-      const { action, tuitionId } = confirmToggle
-      const payload = action === 'activate'   ? { active: true,  status: 'active' }
-                    : action === 'idle'        ? { active: true,  status: 'idle' }
-                    :                            { active: false, status: 'inactive' }
-      await updateTuition(tuitionId, payload)
-      setConfirmToggle(null)
+      await updateTuition(tuitionId, { active: action === 'activate' })
     } catch (err) {
       alert('Failed to update tuition: ' + err.message)
-    } finally {
-      setToggling(false)
     }
   }
 
@@ -117,9 +130,19 @@ export default function TuitionsPage() {
           <h1 className="text-xl font-bold text-slate-800">Tuitions</h1>
           <p className="text-slate-500 text-sm mt-0.5">{filtered.length} tuitions</p>
         </div>
-        {canWrite && (
-          <Button onClick={() => setAddOpen(true)}>+ Add Tuition</Button>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportToCSV(filtered, tutors)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 bg-white">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
+          </button>
+          {canWrite && (
+            <Button onClick={() => setAddOpen(true)}>+ Add Tuition</Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -131,7 +154,6 @@ export default function TuitionsPage() {
           className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white">
           <option value="all">All Status</option>
           <option value="active">Active</option>
-          <option value="idle">Idle</option>
           <option value="inactive">Inactive</option>
         </select>
         <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}
@@ -139,8 +161,8 @@ export default function TuitionsPage() {
           <option value="">All Cities</option>
           {ALL_CITIES.map((c) => <option key={c}>{c}</option>)}
         </select>
-        {(search || filter !== 'active' || cityFilter) && (
-          <button onClick={() => { setSearch(''); setFilter('active'); setCityFilter('') }}
+        {(search || filter !== 'all' || cityFilter) && (
+          <button onClick={() => { setSearch(''); setFilter('all'); setCityFilter('') }}
             className="text-xs text-slate-500 hover:text-slate-700 underline">
             Clear filters
           </button>
@@ -167,8 +189,6 @@ export default function TuitionsPage() {
               ) : filtered.map((t) => (
                 <TuitionRow key={t.id} tuition={t} prevMonth={prevMonth}
                   isManager={isManager}
-                  openMenuId={openMenuId}
-                  onToggleMenu={setOpenMenuId}
                   onView={(id) => setDetailId(id)}
                   onEdit={(id) => setEditId(id)}
                   onToggle={handleToggle}
@@ -199,44 +219,6 @@ export default function TuitionsPage() {
           onClose={() => setEditId(null)}
           onSaved={() => setEditId(null)}
         />
-      )}
-
-      {/* Inline confirm modal for activate/deactivate */}
-      {confirmToggle && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-          onClick={() => setConfirmToggle(null)}>
-          <div style={{ background:'white', borderRadius:16, padding:24, maxWidth:380, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}
-            onClick={(e) => e.stopPropagation()}>
-            <div style={{ width:44, height:44, borderRadius:12, background: confirmToggle.action === 'deactivate' ? '#FEE2E2' : confirmToggle.action === 'idle' ? '#FEF3C7' : '#DCFCE7', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={confirmToggle.action === 'deactivate' ? '#DC2626' : confirmToggle.action === 'idle' ? '#D97706' : '#16A34A'} strokeWidth="2.2" strokeLinecap="round">
-                {confirmToggle.action === 'deactivate'
-                  ? <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>
-                  : <><circle cx="12" cy="12" r="10"/><path d="M9 11l3 3L22 4"/></>
-                }
-              </svg>
-            </div>
-            <p style={{ fontSize:16, fontWeight:700, color:'#0F172A', marginBottom:6 }}>
-              {{activate:'Activate', idle:'Set Idle', deactivate:'Deactivate'}[confirmToggle.action]} Tuition?
-            </p>
-            <p style={{ fontSize:13, color:'#475569', lineHeight:1.6, marginBottom:20 }}>
-              {{
-                activate:   `This will activate the tuition for ${confirmToggle.studentName}.`,
-                idle:       `This will set the tuition for ${confirmToggle.studentName} to Idle. Attendance can still be marked but billing will be disabled.`,
-                deactivate: `This will deactivate the tuition for ${confirmToggle.studentName}. Attendance can no longer be marked.`,
-              }[confirmToggle.action]}
-            </p>
-            <div style={{ display:'flex', gap:10 }}>
-              <button onClick={() => setConfirmToggle(null)} disabled={toggling}
-                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'1.5px solid #E2E8F0', background:'white', color:'#475569', fontSize:14, fontWeight:500, cursor:'pointer' }}>
-                Cancel
-              </button>
-              <button onClick={handleToggleConfirm} disabled={toggling}
-                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'none', background: confirmToggle.action === 'deactivate' ? '#DC2626' : confirmToggle.action === 'idle' ? '#D97706' : '#16A34A', color:'white', fontSize:14, fontWeight:600, cursor:'pointer', opacity: toggling ? 0.7 : 1 }}>
-                {toggling ? 'Updating…' : {activate:'Activate', idle:'Set Idle', deactivate:'Deactivate'}[confirmToggle.action]}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )
