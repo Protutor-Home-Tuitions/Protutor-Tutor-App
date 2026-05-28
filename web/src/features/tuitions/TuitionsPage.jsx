@@ -18,7 +18,7 @@ const HEADERS = ['Enquiry','Start','Parent / Student','Std · Board','Schedule',
 
 export default function TuitionsPage() {
   const [search,        setSearch]        = useState('')
-  const [filter,        setFilter]        = useState('all')
+  const [filter,        setFilter]        = useState('active')
   const [cityFilter,    setCityFilter]    = useState('')
   const [detailId,      setDetailId]      = useState(null)
   const [editId,        setEditId]        = useState(null)
@@ -67,7 +67,7 @@ export default function TuitionsPage() {
 
   const prevMonth = getPrevMonth()
 
-  const filtered = useMemo(() => tuitions.filter((t) => {
+  const filtered = useMemo(() => [...tuitions].sort((a, b) => (b.start || '').localeCompare(a.start || '')).filter((t) => {
     if (!cityAllowed(t.city || '')) return false
     const tStatus = t.status || (t.active ? 'active' : 'inactive')
     if (filter === 'active'   && tStatus !== 'active') return false
@@ -139,8 +139,8 @@ export default function TuitionsPage() {
           <option value="">All Cities</option>
           {ALL_CITIES.map((c) => <option key={c}>{c}</option>)}
         </select>
-        {(search || filter !== 'all' || cityFilter) && (
-          <button onClick={() => { setSearch(''); setFilter('all'); setCityFilter('') }}
+        {(search || filter !== 'active' || cityFilter) && (
+          <button onClick={() => { setSearch(''); setFilter('active'); setCityFilter('') }}
             className="text-xs text-slate-500 hover:text-slate-700 underline">
             Clear filters
           </button>
