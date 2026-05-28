@@ -59,7 +59,7 @@ async function maybeNotifyAttendance(row, tuition, tutor) {
     { name: 'class_time',   value: row.time || '' },
     { name: 'duration',     value: `${row.dur}hr` },
     { name: 'subject',      value: row.subj || '' },
-    { name: 'topic',        value: row.topic || '' },
+    { name: 'topic',        value: row.topic && row.topic.trim() ? row.topic.trim() : 'NA' },
   ]
 
   // Send to parent
