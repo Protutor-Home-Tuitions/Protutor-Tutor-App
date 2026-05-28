@@ -4,6 +4,66 @@ import { requireAuth, requireCanWrite } from '../middleware/auth.js'
 
 const router = Router()
 
+// ── WATI helper ──
+async function sendWatiTemplate(phone, templateName, parameters) {
+  const endpoint = process.env.WATI_ENDPOINT
+  const token    = process.env.WATI_TOKEN
+  if (!endpoint || !token) return
+  const waPhone = phone.startsWith('91') ? phone : `91${phone}`
+  try {
+    await fetch(`${endpoint}/api/v1/sendTemplateMessage?whatsappNumber=${waPhone}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_name: templateName, broadcast_name: templateName, parameters }),
+    })
+  } catch (err) {
+    console.error('WATI error:', err.message)
+  }
+}
+
+// Check if WATI should fire for attendance
+async function maybeNotifyAttendance(row, tuition, tutor) {
+  // Rule 3: only if marked by tutor (byAdmin === false)
+  if (row.byAdmin !== false) return
+
+  // Rule 1: tuition must be active or idle
+  const status = tuition.status || (tuition.active ? 'active' : 'inactive')
+  if (status !== 'active' && status !== 'idle') return
+
+  // Rule 2: if idle, start date must be within 6 months
+  if (status === 'idle' && tuition.start) {
+    const startDate  = new Date(tuition.start + 'T00:00:00')
+    const sixMonthsAgo = new Date()
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+    if (startDate < sixMonthsAgo) return
+  }
+
+  // Format date: DD Mon YYYY
+  const [y, m, d] = row.date.split('-')
+  const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const classDate = `${parseInt(d)} ${MN[parseInt(m)-1]} ${y}`
+
+  const params = [
+    { name: 'student_name', value: tuition.studentName || '' },
+    { name: 'tutor_name',   value: tutor?.name || row.markedBy || '' },
+    { name: 'class_date',   value: classDate },
+    { name: 'class_time',   value: row.time || '' },
+    { name: 'duration',     value: `${row.dur}hr` },
+    { name: 'subject',      value: row.subj || '' },
+    { name: 'topic',        value: row.topic || '—' },
+  ]
+
+  // Send to parent
+  if (tuition.parentPhone) {
+    await sendWatiTemplate(tuition.parentPhone, 'utility_attendance_marked', params)
+  }
+
+  // Send to tutor
+  if (tutor?.phone) {
+    await sendWatiTemplate(tutor.phone, 'utility_attendance_marked', params)
+  }
+}
+
 // GET /api/attendance/completions/:enqId — MUST be before /:enqId
 router.get('/completions/:enqId', requireAuth, async (req, res) => {
   try {
@@ -16,7 +76,7 @@ router.get('/completions/:enqId', requireAuth, async (req, res) => {
   }
 })
 
-// POST /api/attendance/complete — tutor submits month — MUST be before /:enqId
+// POST /api/attendance/complete — MUST be before /:enqId
 router.post('/complete', requireAuth, async (req, res) => {
   try {
     const allowed = ['manager', 'coordinator', 'tutor'].includes(req.user.role)
@@ -63,12 +123,40 @@ router.post('/', requireAuth, async (req, res) => {
   try {
     const allowed = ['manager', 'coordinator', 'tutor'].includes(req.user.role)
     if (!allowed) return res.status(403).json({ error: 'Access denied' })
+
+    const { enqId, date, time, dur, subj, topic, isDemo, byAdmin,
+            monthKey, markedAt, parentComment, tutorId } = req.body
+
     const row = await prisma.attendance.create({
-      data: { ...req.body, markedBy: req.user.name },
+      data: {
+        enqId, date, time, dur, subj, topic,
+        isDemo: isDemo ?? false,
+        byAdmin: byAdmin ?? false,
+        monthKey,
+        markedAt: markedAt ? new Date(markedAt) : new Date(),
+        markedBy: req.user.name,
+        parentComment: parentComment || '',
+        tutorId: tutorId ? parseInt(tutorId) : null,
+      },
     })
+
     res.status(201).json(row)
+
+    // Fire WATI async — don't block response
+    if (!isDemo) {
+      try {
+        const [tuition, tutor] = await Promise.all([
+          prisma.tuition.findUnique({ where: { enqId } }),
+          tutorId ? prisma.tutor.findUnique({ where: { id: parseInt(tutorId) } }) : null,
+        ])
+        if (tuition) await maybeNotifyAttendance(row, tuition, tutor)
+      } catch (err) {
+        console.error('WATI notify error:', err.message)
+      }
+    }
   } catch (err) {
-    res.status(500).json({ error: 'Server error' })
+    console.error('attendance POST error:', err)
+    res.status(500).json({ error: err.message || 'Server error' })
   }
 })
 
