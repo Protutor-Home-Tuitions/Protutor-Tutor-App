@@ -154,10 +154,19 @@ router.post('/', requireAuth, async (req, res) => {
     // Fire WATI async — don't block response
     if (!isDemo) {
       try {
-        const [tuition, tutor] = await Promise.all([
-          prisma.tuition.findUnique({ where: { enqId } }),
-          tutorId ? prisma.tutor.findUnique({ where: { id: parseInt(tutorId) } }) : null,
-        ])
+        const tuition = await prisma.tuition.findUnique({ where: { enqId } })
+        let tutor = null
+        if (tutorId) {
+          tutor = await prisma.tutor.findUnique({ where: { id: parseInt(tutorId) } })
+        }
+        // Fallback: find tutor by logged-in user's phone (tutor role)
+        if (!tutor && req.user.role === 'tutor' && req.user.phone) {
+          tutor = await prisma.tutor.findUnique({ where: { phone: req.user.phone } })
+        }
+        // Fallback: find tutor from tuition record
+        if (!tutor && tuition?.tutorId) {
+          tutor = await prisma.tutor.findUnique({ where: { id: tuition.tutorId } })
+        }
         if (tuition) await maybeNotifyAttendance(row, tuition, tutor)
       } catch (err) {
         console.error('WATI notify error:', err.message)
