@@ -131,14 +131,16 @@ export default function TuitionsPage() {
           <p className="text-slate-500 text-sm mt-0.5">{filtered.length} tuitions</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => exportToCSV(filtered, tutors)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 bg-white">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export CSV
-          </button>
+          {isManager && (
+            <button
+              onClick={() => exportToCSV(filtered, tutors)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 bg-white">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export CSV
+            </button>
+          )}
           {canWrite && (
             <Button onClick={() => setAddOpen(true)}>+ Add Tuition</Button>
           )}
