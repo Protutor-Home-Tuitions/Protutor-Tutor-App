@@ -9,15 +9,24 @@ async function sendWatiTemplate(phone, templateName, parameters) {
   const endpoint = process.env.WATI_ENDPOINT
   const token    = process.env.WATI_TOKEN
   if (!endpoint || !token) return
-  const waPhone = phone.startsWith('91') ? phone : `91${phone}`
+
+  // Validate phone — must be 10 digits
+  const digits = String(phone || '').replace(/\D/g, '')
+  if (digits.length < 10) return
+  const waPhone = digits.startsWith('91') ? digits : `91${digits.slice(-10)}`
+
   try {
-    await fetch(`${endpoint}/api/v1/sendTemplateMessage?whatsappNumber=${waPhone}`, {
+    const res = await fetch(`${endpoint}/api/v1/sendTemplateMessage?whatsappNumber=${waPhone}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_name: templateName, broadcast_name: templateName, parameters }),
     })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`WATI failed for ${waPhone}: ${res.status} ${body}`)
+    }
   } catch (err) {
-    console.error('WATI error:', err.message)
+    console.error('WATI network error:', err.message)
   }
 }
 
@@ -50,7 +59,7 @@ async function maybeNotifyAttendance(row, tuition, tutor) {
     { name: 'class_time',   value: row.time || '' },
     { name: 'duration',     value: `${row.dur}hr` },
     { name: 'subject',      value: row.subj || '' },
-    { name: 'topic',        value: row.topic || '—' },
+    { name: 'topic',        value: row.topic || '' },
   ]
 
   // Send to parent
