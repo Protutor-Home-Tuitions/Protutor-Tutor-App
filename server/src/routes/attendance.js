@@ -151,26 +151,24 @@ router.post('/', requireAuth, async (req, res) => {
 
     res.status(201).json(row)
 
-    // Fire WATI async — don't block response
+    // Fire WATI async immediately — fetch tuition+tutor in parallel
     if (!isDemo) {
-      try {
-        const tuition = await prisma.tuition.findUnique({ where: { enqId } })
-        let tutor = null
-        if (tutorId) {
-          tutor = await prisma.tutor.findUnique({ where: { id: parseInt(tutorId) } })
+      setImmediate(async () => {
+        try {
+          const [tuition, tutorByPhone] = await Promise.all([
+            prisma.tuition.findUnique({ where: { enqId } }),
+            req.user.role === 'tutor' && req.user.phone
+              ? prisma.tutor.findUnique({ where: { phone: req.user.phone } })
+              : null,
+          ])
+          const tutor = tutorByPhone ||
+            (tutorId ? await prisma.tutor.findUnique({ where: { id: parseInt(tutorId) } }) : null) ||
+            (tuition?.tutorId ? await prisma.tutor.findUnique({ where: { id: tuition.tutorId } }) : null)
+          if (tuition) await maybeNotifyAttendance(row, tuition, tutor)
+        } catch (err) {
+          console.error('WATI notify error:', err.message)
         }
-        // Fallback: find tutor by logged-in user's phone (tutor role)
-        if (!tutor && req.user.role === 'tutor' && req.user.phone) {
-          tutor = await prisma.tutor.findUnique({ where: { phone: req.user.phone } })
-        }
-        // Fallback: find tutor from tuition record
-        if (!tutor && tuition?.tutorId) {
-          tutor = await prisma.tutor.findUnique({ where: { id: tuition.tutorId } })
-        }
-        if (tuition) await maybeNotifyAttendance(row, tuition, tutor)
-      } catch (err) {
-        console.error('WATI notify error:', err.message)
-      }
+      })
     }
   } catch (err) {
     console.error('attendance POST error:', err)
