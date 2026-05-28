@@ -49,6 +49,9 @@ export function calcMonthFee(tuition, monthKey, nonDemoAtt) {
 }
 export function isBillingEligible(tuition, pendingComm) {
   if (!tuition) return false
+  // Idle tuitions are NOT eligible for billing
+  const status = tuition.status || (tuition.active ? 'active' : 'inactive')
+  if (status === 'idle' || status === 'inactive') return false
   return pendingComm > 0 || tuition.repeatPayment
 }
 export function buildCommissionChain(enqId, billings, paymentsObj) {

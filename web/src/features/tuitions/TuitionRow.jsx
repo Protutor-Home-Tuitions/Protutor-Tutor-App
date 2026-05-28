@@ -1,6 +1,5 @@
 /**
  * TuitionRow — one row in the tuitions table.
- * Migrated from admin_1.html renderTuitions() tr template.
  */
 import { useState, useEffect } from 'react'
 import { useDataStore } from '@/store/dataStore'
@@ -17,37 +16,41 @@ const WARN_ICON = (
   </svg>
 )
 
+// Derive status — fallback to active boolean for legacy records
+function getStatus(t) {
+  if (t.status) return t.status
+  return t.active ? 'active' : 'inactive'
+}
+
 export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onToggle, isManager, openMenuId, onToggleMenu }) {
   const tutors     = useDataStore((s) => s.tutors)
   const attendance = useDataStore((s) => s.attendance[t.enqId] || [])
+  const status     = getStatus(t)
 
-  const tutor    = tutors.find((tu) => tu.id === t.tutorId)
+  const tutor = tutors.find((tu) => tu.id === t.tutorId)
 
-  // Start date format: "5 Nov"
   const startFmt = t.start
     ? `${parseInt(t.start.split('-')[2])} ${new Date(t.start + 'T00:00:00').toLocaleString('en-IN', { month: 'short' })}`
     : '—'
 
-  // Last attendance — non-demo, most recent
-  const today   = new Date()
-  const tAtt    = attendance
-    .filter((a) => !a.isDemo)
-    .sort((a, b) => b.date.localeCompare(a.date))
+  const today  = new Date()
+  const tAtt   = attendance.filter((a) => !a.isDemo).sort((a, b) => b.date.localeCompare(a.date))
   const lastAtt = tAtt[0] || null
+  const isActiveOrIdle = status === 'active' || status === 'idle'
 
   function LastAttCell() {
     if (!lastAtt) {
       return (
-        <div className={`flex items-center gap-1.5 ${t.active ? 'text-red-700' : 'text-slate-400'}`}>
-          {t.active && WARN_ICON}
-          <span className="text-xs font-semibold">{t.active ? 'Never' : 'Never'}</span>
+        <div className={`flex items-center gap-1.5 ${isActiveOrIdle ? 'text-red-700' : 'text-slate-400'}`}>
+          {isActiveOrIdle && WARN_ICON}
+          <span className="text-xs font-semibold">Never</span>
         </div>
       )
     }
     const lastDate = new Date(lastAtt.date + 'T00:00:00')
     const diffDays = Math.floor((today - lastDate) / 86400000)
     const lastFmt  = `${String(lastDate.getDate()).padStart(2, '0')} ${lastDate.toLocaleString('en-IN', { month: 'short' })}`
-    const isLate   = diffDays > 4 && t.active
+    const isLate   = diffDays > 4 && isActiveOrIdle
 
     return (
       <div className={`flex items-center gap-1.5 ${isLate ? 'text-red-700' : 'text-slate-600'}`}>
@@ -62,105 +65,75 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
     )
   }
 
+  // Status badge
+  function StatusBadge() {
+    if (status === 'idle') return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: '#FEF3C7', color: '#92400E' }}>
+        ⏸ Idle
+      </span>
+    )
+    return <Badge variant={status === 'active' ? 'green' : 'red'}>{status === 'active' ? 'Active' : 'Inactive'}</Badge>
+  }
+
   return (
-    <tr
-      className="hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100"
-      onClick={() => onView(t.id)}
-    >
-      {/* Col 1: EnqID + WA Parent */}
+    <tr className="hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100" onClick={() => onView(t.id)}>
       <td className="px-4 py-3">
-        {t.enqId
-          ? <span className="tag-id">{t.enqId}</span>
-          : <span className="text-slate-400">—</span>}
-        <div className="mt-1.5">
-          <WAParentButton tuition={t} />
-        </div>
+        {t.enqId ? <span className="tag-id">{t.enqId}</span> : <span className="text-slate-400">—</span>}
+        <div className="mt-1.5"><WAParentButton tuition={t} /></div>
       </td>
-
-      {/* Col 2: Start date */}
       <td className="px-4 py-3 whitespace-nowrap font-medium text-sm">{startFmt}</td>
-
-      {/* Col 3: Parent + Student */}
       <td className="px-4 py-3">
         <div className="font-semibold text-sm">{t.parentName || t.studentName}</div>
         <div className="text-xs text-slate-500 mt-0.5">Student: {t.studentName}</div>
         {t.parentPhone && <div className="text-xs text-slate-400">{t.parentPhone}</div>}
       </td>
-
-      {/* Col 4: Standard + Board */}
       <td className="px-4 py-3 text-xs text-slate-600">{t.standard} · {t.board}</td>
-
-      {/* Col 5: Schedule */}
       <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
         {t.days?.join(', ')}<br />
         <span className="text-slate-400">{t.duration}hr/day</span>
       </td>
-
-      {/* Col 6: Tutor + WA Tutor */}
       <td className="px-4 py-3 text-sm">
         {tutor ? (
           <>
             <div className="font-medium">{tutor.name}</div>
             <div className="text-xs text-slate-400">{tutor.phone}</div>
-            <div className="mt-1.5">
-              <WATutorButton tuition={t} />
-            </div>
+            <div className="mt-1.5"><WATutorButton tuition={t} /></div>
           </>
         ) : <span className="text-slate-400">—</span>}
       </td>
-
-      {/* Col 7: Fee */}
       <td className="px-4 py-3 whitespace-nowrap">
         <div className="font-semibold text-sm">₹{t.feeParent}<span className="text-xs text-slate-400 font-normal">/{t.feeType}</span></div>
         <div className="text-xs mt-0.5" style={{ color: t.repeatPayment ? 'var(--success)' : 'var(--text3)' }}>
           {t.repeatPayment ? '↻ Repeat' : 'No repeat'}
         </div>
       </td>
-
-      {/* Col 8: Last Attendance */}
-      <td className="px-4 py-3">
-        <LastAttCell />
-      </td>
-
-      {/* Col 9: Active + Comm */}
-      <td className="px-4 py-3">
-        <Badge variant={t.active ? 'green' : 'red'}>
-          {t.active ? 'Active' : 'Inactive'}
-        </Badge>
-      </td>
-
-      {/* Col 10: Status dots */}
+      <td className="px-4 py-3"><LastAttCell /></td>
+      <td className="px-4 py-3"><StatusBadge /></td>
       <td className="px-4 py-3" style={{ minWidth: 140 }}>
         <StatusDots tuition={t} prevMonth={prevMonth} />
       </td>
-
-      {/* Col 11: Actions */}
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <ActionMenu
           tuition={t}
+          status={status}
           isManager={isManager}
           open={openMenuId === t.id}
           onToggleOpen={(id) => onToggleMenu(id === openMenuId ? null : id)}
           onView={() => onView(t.id)}
           onEdit={() => onEdit(t.id)}
-          onToggle={() => onToggle(t.id, t.active ? 'deactivate' : 'activate')}
+          onToggle={onToggle}
         />
       </td>
     </tr>
   )
 }
 
-function ActionMenu({ tuition, onView, onEdit, onToggle, isManager, open, onToggleOpen }) {
+function ActionMenu({ tuition, status, onView, onEdit, onToggle, isManager, open, onToggleOpen }) {
   useEffect(() => {
     if (!open) return
     function handleClick() { onToggleOpen(null) }
-    const timer = setTimeout(() => {
-      document.addEventListener('click', handleClick)
-    }, 0)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('click', handleClick)
-    }
+    const timer = setTimeout(() => { document.addEventListener('click', handleClick) }, 0)
+    return () => { clearTimeout(timer); document.removeEventListener('click', handleClick) }
   }, [open])
 
   return (
@@ -175,17 +148,30 @@ function ActionMenu({ tuition, onView, onEdit, onToggle, isManager, open, onTogg
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-32 overflow-hidden">
-          <button onClick={() => { onToggleOpen(null); onView() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
+        <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-36 overflow-hidden">
+          <button onClick={() => { onToggleOpen(null); onView() }}
+            className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">View</button>
           {isManager && <>
-            <button onClick={() => { onToggleOpen(null); onEdit() }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
-            <button
-              onClick={() => { onToggleOpen(null); onToggle() }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
-              style={{ color: tuition.active ? '#DC2626' : '#15803D' }}
-            >
-              {tuition.active ? 'Deactivate' : 'Activate'}
-            </button>
+            <button onClick={() => { onToggleOpen(null); onEdit() }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100">Edit</button>
+            {status !== 'active' && (
+              <button onClick={() => { onToggleOpen(null); onToggle(tuition.id, 'activate') }}
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100" style={{ color: '#15803D' }}>
+                Activate
+              </button>
+            )}
+            {status !== 'idle' && (
+              <button onClick={() => { onToggleOpen(null); onToggle(tuition.id, 'idle') }}
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100" style={{ color: '#92400E' }}>
+                Set Idle
+              </button>
+            )}
+            {status !== 'inactive' && (
+              <button onClick={() => { onToggleOpen(null); onToggle(tuition.id, 'deactivate') }}
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50" style={{ color: '#DC2626' }}>
+                Deactivate
+              </button>
+            )}
           </>}
         </div>
       )}

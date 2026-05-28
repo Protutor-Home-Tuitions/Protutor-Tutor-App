@@ -5,6 +5,7 @@ const VARIANTS = {
   ghost:     'bg-transparent hover:bg-slate-100 text-slate-600 border-transparent',
   success:   'bg-green-600 hover:bg-green-700 text-white border-transparent',
   purple:    'bg-purple-600 hover:bg-purple-700 text-white border-transparent',
+  warning:   'bg-yellow-500 hover:bg-yellow-600 text-white border-transparent',
 }
 
 const SIZES = {

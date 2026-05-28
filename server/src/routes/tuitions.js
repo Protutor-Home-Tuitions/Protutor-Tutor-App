@@ -70,12 +70,18 @@ router.post('/', requireAuth, async (req, res) => {
   }
 })
 
-// PATCH /api/tuitions/:id — manager only (edit + deactivate)
+// PATCH /api/tuitions/:id — manager only (edit + deactivate + idle)
 router.patch('/:id', requireAuth, requireManager, async (req, res) => {
   try {
+    const body = { ...req.body }
+    // Sync active boolean with status string
+    if (body.status === 'inactive') body.active = false
+    else if (body.status === 'active' || body.status === 'idle') body.active = true
+    if (body.active === false && !body.status) body.status = 'inactive'
+    if (body.active === true && !body.status) body.status = 'active'
     const tuition = await prisma.tuition.update({
       where: { id: req.params.id },
-      data: { ...req.body, lastEditedBy: req.user.name, lastEditedAt: new Date() },
+      data: { ...body, lastEditedBy: req.user.name, lastEditedAt: new Date() },
     })
     res.json(tuition)
   } catch (err) {

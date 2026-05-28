@@ -69,8 +69,10 @@ export default function TuitionsPage() {
 
   const filtered = useMemo(() => tuitions.filter((t) => {
     if (!cityAllowed(t.city || '')) return false
-    if (filter === 'active'   && !t.active) return false
-    if (filter === 'inactive' &&  t.active) return false
+    const tStatus = t.status || (t.active ? 'active' : 'inactive')
+    if (filter === 'active'   && tStatus !== 'active') return false
+    if (filter === 'inactive' && tStatus !== 'inactive') return false
+    if (filter === 'idle'     && tStatus !== 'idle') return false
     if (cityFilter && t.city !== cityFilter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -94,7 +96,11 @@ export default function TuitionsPage() {
     if (!confirmToggle) return
     setToggling(true)
     try {
-      await updateTuition(confirmToggle.tuitionId, { active: confirmToggle.action === 'activate' })
+      const { action, tuitionId } = confirmToggle
+      const payload = action === 'activate'   ? { active: true,  status: 'active' }
+                    : action === 'idle'        ? { active: true,  status: 'idle' }
+                    :                            { active: false, status: 'inactive' }
+      await updateTuition(tuitionId, payload)
       setConfirmToggle(null)
     } catch (err) {
       alert('Failed to update tuition: ' + err.message)
@@ -125,6 +131,7 @@ export default function TuitionsPage() {
           className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white">
           <option value="all">All Status</option>
           <option value="active">Active</option>
+          <option value="idle">Idle</option>
           <option value="inactive">Inactive</option>
         </select>
         <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}
@@ -200,8 +207,8 @@ export default function TuitionsPage() {
           onClick={() => setConfirmToggle(null)}>
           <div style={{ background:'white', borderRadius:16, padding:24, maxWidth:380, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}
             onClick={(e) => e.stopPropagation()}>
-            <div style={{ width:44, height:44, borderRadius:12, background: confirmToggle.action === 'deactivate' ? '#FEE2E2' : '#DCFCE7', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={confirmToggle.action === 'deactivate' ? '#DC2626' : '#16A34A'} strokeWidth="2.2" strokeLinecap="round">
+            <div style={{ width:44, height:44, borderRadius:12, background: confirmToggle.action === 'deactivate' ? '#FEE2E2' : confirmToggle.action === 'idle' ? '#FEF3C7' : '#DCFCE7', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={confirmToggle.action === 'deactivate' ? '#DC2626' : confirmToggle.action === 'idle' ? '#D97706' : '#16A34A'} strokeWidth="2.2" strokeLinecap="round">
                 {confirmToggle.action === 'deactivate'
                   ? <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>
                   : <><circle cx="12" cy="12" r="10"/><path d="M9 11l3 3L22 4"/></>
@@ -209,13 +216,14 @@ export default function TuitionsPage() {
               </svg>
             </div>
             <p style={{ fontSize:16, fontWeight:700, color:'#0F172A', marginBottom:6 }}>
-              {confirmToggle.action === 'deactivate' ? 'Deactivate' : 'Activate'} Tuition?
+              {{activate:'Activate', idle:'Set Idle', deactivate:'Deactivate'}[confirmToggle.action]} Tuition?
             </p>
             <p style={{ fontSize:13, color:'#475569', lineHeight:1.6, marginBottom:20 }}>
-              {confirmToggle.action === 'deactivate'
-                ? `This will deactivate the tuition for ${confirmToggle.studentName}. Attendance can no longer be marked.`
-                : `This will activate the tuition for ${confirmToggle.studentName}.`
-              }
+              {{
+                activate:   `This will activate the tuition for ${confirmToggle.studentName}.`,
+                idle:       `This will set the tuition for ${confirmToggle.studentName} to Idle. Attendance can still be marked but billing will be disabled.`,
+                deactivate: `This will deactivate the tuition for ${confirmToggle.studentName}. Attendance can no longer be marked.`,
+              }[confirmToggle.action]}
             </p>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setConfirmToggle(null)} disabled={toggling}
@@ -223,8 +231,8 @@ export default function TuitionsPage() {
                 Cancel
               </button>
               <button onClick={handleToggleConfirm} disabled={toggling}
-                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'none', background: confirmToggle.action === 'deactivate' ? '#DC2626' : '#16A34A', color:'white', fontSize:14, fontWeight:600, cursor:'pointer', opacity: toggling ? 0.7 : 1 }}>
-                {toggling ? 'Updating…' : confirmToggle.action === 'deactivate' ? 'Deactivate' : 'Activate'}
+                style={{ flex:1, padding:'10px 0', borderRadius:10, border:'none', background: confirmToggle.action === 'deactivate' ? '#DC2626' : confirmToggle.action === 'idle' ? '#D97706' : '#16A34A', color:'white', fontSize:14, fontWeight:600, cursor:'pointer', opacity: toggling ? 0.7 : 1 }}>
+                {toggling ? 'Updating…' : {activate:'Activate', idle:'Set Idle', deactivate:'Deactivate'}[confirmToggle.action]}
               </button>
             </div>
           </div>

@@ -71,6 +71,7 @@ model Tuition {
   start         String?  // YYYY-MM-DD
   startMonth    String?  // YYYY-MM
   active        Boolean  @default(true)
+  status        String   @default("active") // active | idle | inactive
   createdBy     String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

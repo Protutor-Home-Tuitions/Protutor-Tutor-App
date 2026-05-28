@@ -45,11 +45,14 @@ export default function TuitionDetailModal({ tuitionId, onClose }) {
 
   if (!t) return null
 
-  async function handleToggle() {
-    const action = t.active ? 'Deactivate' : 'Activate'
-    if (!window.confirm(`${action} tuition for ${t.studentName}?`)) return
+  async function handleToggle(action) {
+    const label = {activate:'Activate', idle:'Set Idle', deactivate:'Deactivate'}[action]
+    if (!window.confirm(`${label} tuition for ${t.studentName}?`)) return
     try {
-      await updateTuition(tuitionId, { active: !t.active })
+      const payload = action === 'activate'   ? { active: true,  status: 'active' }
+                    : action === 'idle'        ? { active: true,  status: 'idle' }
+                    :                            { active: false, status: 'inactive' }
+      await updateTuition(tuitionId, payload)
     } catch (err) {
       alert('Failed: ' + err.message)
     }
@@ -62,11 +65,14 @@ export default function TuitionDetailModal({ tuitionId, onClose }) {
           <>
             <Button variant="secondary" onClick={onClose}>Close</Button>
             {isManager && <Button variant="secondary" onClick={() => setEditOpen(true)}>✏ Edit</Button>}
-            {isManager && (
-              <Button variant={t.active ? 'danger' : 'success'} onClick={handleToggle}>
-                {t.active ? 'Deactivate Tuition' : 'Activate Tuition'}
-              </Button>
-            )}
+            {isManager && (() => {
+              const status = t.status || (t.active ? 'active' : 'inactive')
+              return (<>
+                {status !== 'active' && <Button variant="success" onClick={() => handleToggle('activate')}>Activate</Button>}
+                {status !== 'idle' && <Button variant="warning" onClick={() => handleToggle('idle')}>Set Idle</Button>}
+                {status !== 'inactive' && <Button variant="danger" onClick={() => handleToggle('deactivate')}>Deactivate</Button>}
+              </>)
+            })()}
           </>
         }
       >
