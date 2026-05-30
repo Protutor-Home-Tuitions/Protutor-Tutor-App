@@ -73,22 +73,17 @@ async function maybeNotifyAttendance(row, tuition, tutor) {
   }
 }
 
-
-// ── Refresh lastAttDate on tuition after any attendance change ──
-async function refreshLastAttDate(enqId) {
+// GET /api/attendance/completions — all completions (for dashboard Att pill)
+router.get('/completions', requireAuth, async (req, res) => {
   try {
-    const latest = await prisma.attendance.findFirst({
-      where: { enqId, isDemo: false },
-      orderBy: { date: 'desc' },
+    const rows = await prisma.attCompletion.findMany({
+      orderBy: { completedAt: 'desc' },
     })
-    await prisma.tuition.updateMany({
-      where: { enqId },
-      data: { lastAttDate: latest?.date || null },
-    })
+    res.json(rows)
   } catch (err) {
-    console.error('refreshLastAttDate error:', err.message)
+    res.status(500).json({ error: 'Server error' })
   }
-}
+})
 
 // GET /api/attendance/completions/:enqId — MUST be before /:enqId
 router.get('/completions/:enqId', requireAuth, async (req, res) => {
@@ -168,9 +163,6 @@ router.post('/', requireAuth, async (req, res) => {
 
     res.status(201).json(row)
 
-    // Update lastAttDate async
-    if (!isDemo) setImmediate(() => refreshLastAttDate(enqId))
-
     // Fire WATI async immediately — fetch tuition+tutor in parallel
     if (!isDemo) {
       setImmediate(async () => {
@@ -204,7 +196,6 @@ router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
       data: req.body,
     })
     res.json(row)
-    setImmediate(() => refreshLastAttDate(row.enqId))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -213,10 +204,8 @@ router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
 // DELETE /api/attendance/:id — admin/coordinator only
 router.delete('/:id', requireAuth, requireCanWrite, async (req, res) => {
   try {
-    const row = await prisma.attendance.findUnique({ where: { id: req.params.id } })
     await prisma.attendance.delete({ where: { id: req.params.id } })
     res.json({ ok: true })
-    if (row?.enqId) setImmediate(() => refreshLastAttDate(row.enqId))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }

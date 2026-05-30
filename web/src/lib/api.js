@@ -55,6 +55,7 @@ export const api = {
   deleteAttendance:(id)    => request('DELETE', `/attendance/${id}`),
 
   // Att completions
+  getAllAttCompletions: ()       => request('GET', '/attendance/completions'),
   getAttCompletions: (enqId) => request('GET', `/attendance/completions/${enqId}`),
 
   // Billings

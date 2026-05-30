@@ -20,6 +20,15 @@ export const useDataStore = create((set, get) => ({
       api.getUsers()
         .then((adminUsers) => set({ adminUsers }))
         .catch(() => {}) // non-managers get 403, that's fine
+
+      // Fetch all att completions in background for StatusDots Att pill
+      api.getAllAttCompletions()
+        .then((completions) => {
+          const compMap = {}
+          completions.forEach((c) => { compMap[`${c.enqId}_${c.monthKey}`] = c })
+          set({ attCompletions: compMap })
+        })
+        .catch(() => {})
     } catch (err) {
       console.error('Bootstrap error:', err)
       set({ error: err.message, loading: false })
