@@ -23,9 +23,8 @@ function getStatus(t) {
 }
 
 export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onToggle, isManager, openMenuId, onToggleMenu }) {
-  const tutors     = useDataStore((s) => s.tutors)
-  const attendance = useDataStore((s) => s.attendance[t.enqId] || [])
-  const status     = getStatus(t)
+  const tutors = useDataStore((s) => s.tutors)
+  const status  = getStatus(t)
 
   const tutor = tutors.find((tu) => tu.id === t.tutorId)
 
@@ -33,13 +32,11 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
     ? `${parseInt(t.start.split('-')[2])} ${new Date(t.start + 'T00:00:00').toLocaleString('en-IN', { month: 'short' })}`
     : '—'
 
-  const today  = new Date()
-  const tAtt   = attendance.filter((a) => !a.isDemo).sort((a, b) => b.date.localeCompare(a.date))
-  const lastAtt = tAtt[0] || null
+  const today          = new Date()
   const isActiveOrIdle = status === 'active' || status === 'idle'
 
   function LastAttCell() {
-    if (!lastAtt) {
+    if (!t.lastAttDate) {
       return (
         <div className={`flex items-center gap-1.5 ${isActiveOrIdle ? 'text-red-700' : 'text-slate-400'}`}>
           {isActiveOrIdle && WARN_ICON}
@@ -47,7 +44,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
         </div>
       )
     }
-    const lastDate = new Date(lastAtt.date + 'T00:00:00')
+    const lastDate = new Date(t.lastAttDate + 'T00:00:00')
     const diffDays = Math.floor((today - lastDate) / 86400000)
     const lastFmt  = `${String(lastDate.getDate()).padStart(2, '0')} ${lastDate.toLocaleString('en-IN', { month: 'short' })}`
     const isLate   = diffDays > 4 && isActiveOrIdle

@@ -72,6 +72,7 @@ model Tuition {
   startMonth    String?  // YYYY-MM
   active        Boolean  @default(true)
   status        String   @default("active") // active | idle | inactive
+  lastAttDate   String?  // last non-demo attendance date YYYY-MM-DD
   createdBy     String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
