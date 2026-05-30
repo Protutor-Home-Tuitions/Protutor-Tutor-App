@@ -97,7 +97,7 @@ export default function TuitionsPage() {
 
   const prevMonth = getPrevMonth()
 
-  const filtered = useMemo(() => tuitions.filter((t) => {
+  const filtered = useMemo(() => [...tuitions].sort((a, b) => (b.start || '').localeCompare(a.start || '')).filter((t) => {
     if (!cityAllowed(t.city || '')) return false
     if (filter === 'active'   && !t.active) return false
     if (filter === 'inactive' &&  t.active) return false
