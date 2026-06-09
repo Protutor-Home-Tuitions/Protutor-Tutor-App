@@ -10,7 +10,6 @@ async function sendWatiTemplate(phone, templateName, parameters) {
   const token    = process.env.WATI_TOKEN
   if (!endpoint || !token) return
 
-  // Validate phone — must be 10 digits
   const digits = String(phone || '').replace(/\D/g, '')
   if (digits.length < 10) return
   const waPhone = digits.startsWith('91') ? digits : `91${digits.slice(-10)}`
@@ -30,24 +29,36 @@ async function sendWatiTemplate(phone, templateName, parameters) {
   }
 }
 
-// Check if WATI should fire for attendance
+// ── Refresh lastAttDate on tuition after any attendance change ──
+async function refreshLastAttDate(enqId) {
+  try {
+    const latest = await prisma.attendance.findFirst({
+      where: { enqId, isDemo: false },
+      orderBy: { date: 'desc' },
+    })
+    await prisma.tuition.updateMany({
+      where: { enqId },
+      data: { lastAttDate: latest?.date || null },
+    })
+  } catch (err) {
+    console.error('refreshLastAttDate error:', err.message)
+  }
+}
+
+// ── Check if WATI should fire for attendance ──
 async function maybeNotifyAttendance(row, tuition, tutor) {
-  // Rule 3: only if marked by tutor (byAdmin is false or null, NOT true)
   if (row.byAdmin === true) return
 
-  // Rule 1: tuition must be active or idle
   const status = tuition.status || (tuition.active ? 'active' : 'inactive')
   if (status !== 'active' && status !== 'idle') return
 
-  // Rule 2: if idle, start date must be within 6 months
   if (status === 'idle' && tuition.start) {
-    const startDate  = new Date(tuition.start + 'T00:00:00')
+    const startDate    = new Date(tuition.start + 'T00:00:00')
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
     if (startDate < sixMonthsAgo) return
   }
 
-  // Format date: DD Mon YYYY
   const [y, m, d] = row.date.split('-')
   const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const classDate = `${parseInt(d)} ${MN[parseInt(m)-1]} ${y}`
@@ -62,12 +73,9 @@ async function maybeNotifyAttendance(row, tuition, tutor) {
     { name: 'topic',        value: row.topic && row.topic.trim() ? row.topic.trim() : 'NA' },
   ]
 
-  // Send to parent
   if (tuition.parentPhone) {
     await sendWatiTemplate(tuition.parentPhone, 'utility_attendance_marked', params)
   }
-
-  // Send to tutor
   if (tutor?.phone) {
     await sendWatiTemplate(tutor.phone, 'utility_attendance_marked', params)
   }
@@ -163,9 +171,13 @@ router.post('/', requireAuth, async (req, res) => {
 
     res.status(201).json(row)
 
-    // Fire WATI async immediately — fetch tuition+tutor in parallel
-    if (!isDemo) {
-      setImmediate(async () => {
+    // After response — update lastAttDate + fire WATI async
+    setImmediate(async () => {
+      // 1. Update lastAttDate for this tuition
+      if (!isDemo) await refreshLastAttDate(enqId)
+
+      // 2. Fire WATI notification
+      if (!isDemo) {
         try {
           const [tuition, tutorByPhone] = await Promise.all([
             prisma.tuition.findUnique({ where: { enqId } }),
@@ -180,8 +192,8 @@ router.post('/', requireAuth, async (req, res) => {
         } catch (err) {
           console.error('WATI notify error:', err.message)
         }
-      })
-    }
+      }
+    })
   } catch (err) {
     console.error('attendance POST error:', err)
     res.status(500).json({ error: err.message || 'Server error' })
@@ -196,6 +208,7 @@ router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
       data: req.body,
     })
     res.json(row)
+    setImmediate(() => refreshLastAttDate(row.enqId))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -204,8 +217,10 @@ router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
 // DELETE /api/attendance/:id — admin/coordinator only
 router.delete('/:id', requireAuth, requireCanWrite, async (req, res) => {
   try {
+    const row = await prisma.attendance.findUnique({ where: { id: req.params.id } })
     await prisma.attendance.delete({ where: { id: req.params.id } })
     res.json({ ok: true })
+    if (row?.enqId) setImmediate(() => refreshLastAttDate(row.enqId))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
