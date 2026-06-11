@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
-import { calcMonthFee } from '@/utils/helpers'
+import { calcMonthFee, calcTutorAmount, calcEffHourly } from '@/utils/helpers'
 import { MN_FULL } from '@/utils/helpers'
 import { fd } from '@/utils/helpers'
 import AddAttModal from './AddAttModal'
@@ -67,6 +67,12 @@ export default function AttendanceTab({ tuitionId }) {
   const totalClasses = monthAtt.length
   const totalHours   = parseFloat(monthAtt.reduce((s, a) => s + parseFloat(a.dur || 0), 0).toFixed(1))
   const monthFee     = t && monthKey ? calcMonthFee(t, monthKey, monthAtt) : null
+  const tutorFee     = t && monthKey ? calcTutorAmount(t, monthKey, monthAtt) : null
+  const pFeeType     = t?.parentFeeType || t?.feeType
+  const tFeeType     = t?.tutorFeeType  || t?.feeType
+  const effHrP       = t && monthKey ? calcEffHourly(t?.feeParent, pFeeType, t, monthKey, false) : null
+  const bothMonthly  = pFeeType === 'Monthly' && tFeeType === 'Monthly'
+  const effHrT       = t && monthKey ? calcEffHourly(t?.feeTutor, tFeeType, t, monthKey, tFeeType === 'Monthly' && !bothMonthly) : null
 
   const attSubmitted = monthKey ? !!attCompletions[`${enqId}_${monthKey}`] : false
   const attComp      = monthKey ? attCompletions[`${enqId}_${monthKey}`] : null
@@ -110,7 +116,7 @@ export default function AttendanceTab({ tuitionId }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-3 gap-3 mb-2">
         <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: '#EFF6FF' }}>
           <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#1A56DB' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M9 11l3 3L22 4" /></svg>
@@ -138,6 +144,14 @@ export default function AttendanceTab({ tuitionId }) {
             <div className="text-xs font-medium mt-0.5" style={{ color: '#6B21A8' }}>Amount · Fee (P)</div>
           </div>
         </div>
+      </div>
+      {/* Fee(T) + Eff/hr row */}
+      <div className="flex items-center gap-4 mb-5 px-1">
+        <span className="text-xs text-slate-500">Fee(T): <strong className="text-slate-700">{tutorFee !== null ? `₹${tutorFee.toLocaleString('en-IN')}` : '—'}</strong></span>
+        <span className="text-xs text-slate-400">|</span>
+        <span className="text-xs text-slate-500">Eff/hr(P): <strong className="text-slate-700">{effHrP !== null ? `₹${effHrP}` : '—'}</strong></span>
+        <span className="text-xs text-slate-400">|</span>
+        <span className="text-xs text-slate-500">Eff/hr(T): <strong className="text-slate-700">{effHrT !== null ? `₹${effHrT}` : '—'}</strong></span>
       </div>
 
       {/* Action row */}

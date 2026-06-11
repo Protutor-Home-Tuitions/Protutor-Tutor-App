@@ -1,5 +1,5 @@
 import Badge from '@/components/ui/Badge'
-import { fd } from '@/utils/helpers'
+import { fd, estimateCompanyFee } from '@/utils/helpers'
 
 function VCell({ label, value }) {
   return (
@@ -11,7 +11,9 @@ function VCell({ label, value }) {
 }
 
 export default function DetailsTab({ tuition: t, tutor }) {
-  const feeCompany = t.feeParent - t.feeTutor
+  const pType = t.parentFeeType || t.feeType
+  const tType = t.tutorFeeType  || t.feeType
+  const feeCompany = t.feeCompany || estimateCompanyFee(t) || (t.feeParent - t.feeTutor)
 
   return (
     <div className="space-y-4">
@@ -45,12 +47,12 @@ export default function DetailsTab({ tuition: t, tutor }) {
       <div>
         <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Fee Details</p>
         <div className="grid grid-cols-3 gap-3">
-          <VCell label="Fee (Parent)"   value={`₹${t.feeParent}/${t.feeType}`} />
-          <VCell label="Fee (Tutor)"    value={`₹${t.feeTutor}/${t.feeType}`} />
-          <VCell label="Fee (Company)"  value={`₹${feeCompany}/${t.feeType}`} />
-          <VCell label="One-Time Fee"     value={t.commission ? `₹${t.commission}` : '—'} />
+          <VCell label="Fee (Parent)"   value={`₹${t.feeParent}/${pType}`} />
+          <VCell label="Fee (Tutor)"    value={`₹${t.feeTutor}/${tType}`} />
+          <VCell label="Fee (Company)"  value={`~₹${feeCompany}`} />
+          <VCell label="One-Time Fee"   value={t.commission ? `₹${t.commission}` : '—'} />
           <VCell label="Repeat"         value={t.repeatPayment ? '↻ Yes — Repeat' : 'No'} />
-          <VCell label="Fee Type"       value={t.feeType} />
+          <VCell label="Calc Mode"      value={pType === 'Monthly' && tType === 'Monthly' ? (t.calcMode || 'calendar') : '—'} />
         </div>
       </div>
 

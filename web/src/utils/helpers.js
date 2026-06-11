@@ -37,15 +37,183 @@ export function countWeekdaysInMonth(year, month) {
   }
   return count
 }
-export function calcMonthFee(tuition, monthKey, nonDemoAtt) {
-  if (!tuition || !monthKey || !nonDemoAtt?.length) return null
-  const fee = tuition.feeParent || 0
-  const cls = nonDemoAtt.length
-  const hrs = nonDemoAtt.reduce((s,a) => s + parseFloat(a.dur||0), 0)
-  if (tuition.feeType === 'Session') return Math.floor(fee * cls)
-  if (tuition.feeType === 'Hourly')  return Math.floor(fee * hrs)
+
+// ─────────────────────────────────────────────────────────────
+// FEE CALCULATION ENGINE
+// Supports 4 cases based on parentFeeType + tutorFeeType:
+//   Case 1: Monthly / Monthly   — calendar or fixed working hours
+//   Case 2: Hourly|Session / Hourly|Session (same type)
+//   Case 3: Hourly|Session / Monthly
+//   Case 4: Hourly|Session / Hourly|Session (different types)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Count how many days in a month match the tuition schedule.
+ * e.g. tuition has ['Mon','Wed','Fri'] — counts only Mon/Wed/Fri in that month.
+ */
+export function countScheduledDaysInMonth(year, month, scheduledDays) {
+  if (!scheduledDays?.length) return 0
+  const DOW_MAP = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 }
+  const targetDows = scheduledDays.map((d) => DOW_MAP[d]).filter((d) => d !== undefined)
+  if (!targetDows.length) return 0
+  const daysInMonth = new Date(year, month, 0).getDate()
+  let count = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month - 1, d).getDay()
+    if (targetDows.includes(dow)) count++
+  }
+  return count
+}
+
+/**
+ * Get working hours for a tuition in a given month.
+ * Case 1 calendar: count actual scheduled days in calendar month × duration
+ * Case 1 fixed:    days/week × duration × 4
+ * Case 3 tutor:    always days/week × duration × 4 (never calendar)
+ * Returns 0 if data missing (guard against division by zero upstream).
+ */
+export function getWorkingHours(tuition, monthKey, forceFixed = false) {
+  const dur      = parseFloat(tuition?.duration || 0)
+  const daysArr  = tuition?.days || []
+  const daysPerWeek = daysArr.length
+  if (!dur || !daysPerWeek) return 0
+
+  const useFixed = forceFixed || tuition?.calcMode === 'fixed'
+
+  if (useFixed) {
+    return parseFloat((daysPerWeek * dur * 4).toFixed(4))
+  }
+
+  // Calendar mode — count actual scheduled days in that month
+  if (!monthKey) return 0
   const [y, m] = monthKey.split('-').map(Number)
-  return Math.floor((fee * cls) / countWeekdaysInMonth(y, m))
+  const scheduledDays = countScheduledDaysInMonth(y, m, daysArr)
+  return parseFloat((scheduledDays * dur).toFixed(4))
+}
+
+/**
+ * Get effective hourly rate for a fee amount.
+ * Returns number with 2 decimal precision.
+ * Returns null if calculation not possible.
+ */
+export function calcEffHourly(fee, feeType, tuition, monthKey, forceFixed = false) {
+  if (!fee || !feeType) return null
+  const f = parseFloat(fee)
+  if (!f) return null
+
+  if (feeType === 'Hourly') {
+    return parseFloat(f.toFixed(2))
+  }
+
+  if (feeType === 'Session') {
+    const dur = parseFloat(tuition?.duration || 0)
+    if (!dur) return null
+    return parseFloat((f / dur).toFixed(2))
+  }
+
+  if (feeType === 'Monthly') {
+    const workingHrs = getWorkingHours(tuition, monthKey, forceFixed)
+    if (!workingHrs) return null
+    return parseFloat((f / workingHrs).toFixed(2))
+  }
+
+  return null
+}
+
+/**
+ * Calculate parent amount for a given month's attendance.
+ * Returns rounded integer or null if no attendance.
+ */
+export function calcParentAmount(tuition, monthKey, nonDemoAtt) {
+  if (!tuition || !monthKey || !nonDemoAtt?.length) return null
+
+  const feeType = tuition.parentFeeType || tuition.feeType
+  const fee     = parseFloat(tuition.feeParent || 0)
+  if (!fee || !feeType) return null
+
+  const actualHours = nonDemoAtt.reduce((s, a) => s + parseFloat(a.dur || 0), 0)
+  if (!actualHours) return 0
+
+  const effHourly = calcEffHourly(fee, feeType, tuition, monthKey, false)
+  if (effHourly === null) return null
+
+  return Math.round(effHourly * actualHours)
+}
+
+/**
+ * Calculate tutor amount for a given month's attendance.
+ * For tutor Monthly: always uses fixed formula (days/week × dur × 4), not calendar.
+ * Returns rounded integer or null if no attendance.
+ */
+export function calcTutorAmount(tuition, monthKey, nonDemoAtt) {
+  if (!tuition || !monthKey || !nonDemoAtt?.length) return null
+
+  const feeType = tuition.tutorFeeType || tuition.feeType
+  const fee     = parseFloat(tuition.feeTutor || 0)
+  if (!fee || !feeType) return null
+
+  const actualHours = nonDemoAtt.reduce((s, a) => s + parseFloat(a.dur || 0), 0)
+  if (!actualHours) return 0
+
+  // Case 1 (both Monthly): tutor uses calcMode (calendar or fixed) — same as parent
+  // Case 3 (parent Hourly/Session, tutor Monthly): always fixed (days/wk × dur × 4)
+  const parentType = tuition.parentFeeType || tuition.feeType
+  const bothMonthly = parentType === 'Monthly' && feeType === 'Monthly'
+  const forceFixed = feeType === 'Monthly' && !bothMonthly
+  const effHourly  = calcEffHourly(fee, feeType, tuition, monthKey, forceFixed)
+  if (effHourly === null) return null
+
+  return Math.round(effHourly * actualHours)
+}
+
+/**
+ * Calculate company fee = parent amount - tutor amount.
+ * Returns null if either amount is null.
+ */
+export function calcCompanyFee(tuition, monthKey, nonDemoAtt) {
+  const p = calcParentAmount(tuition, monthKey, nonDemoAtt)
+  const t = calcTutorAmount(tuition, monthKey, nonDemoAtt)
+  if (p === null || t === null) return null
+  return p - t
+}
+
+/**
+ * Estimate company fee at tuition-creation time (no attendance yet).
+ * Used in the form and tuition display.
+ */
+export function estimateCompanyFee(tuition) {
+  const pFeeType = tuition.parentFeeType || tuition.feeType
+  const tFeeType = tuition.tutorFeeType  || tuition.feeType
+  const feeP     = parseFloat(tuition.feeParent || 0)
+  const feeT     = parseFloat(tuition.feeTutor  || 0)
+  const dur      = parseFloat(tuition.duration  || 0)
+  const daysPerWeek = (tuition.days || []).length
+
+  if (!feeP || !feeT || !dur || !daysPerWeek) return null
+
+  const workingHrsFixed = daysPerWeek * dur * 4 // always fixed for estimate
+
+  // Effective hourly estimates
+  let pEff, tEff
+
+  if (pFeeType === 'Monthly')      pEff = feeP / workingHrsFixed
+  else if (pFeeType === 'Hourly')  pEff = feeP
+  else if (pFeeType === 'Session') pEff = feeP / dur
+  else return null
+
+  if (tFeeType === 'Monthly')      tEff = feeT / workingHrsFixed
+  else if (tFeeType === 'Hourly')  tEff = feeT
+  else if (tFeeType === 'Session') tEff = feeT / dur
+  else return null
+
+  const estimatedP = Math.round(pEff * workingHrsFixed)
+  const estimatedT = Math.round(tEff * workingHrsFixed)
+  return estimatedP - estimatedT
+}
+
+export function calcMonthFee(tuition, monthKey, nonDemoAtt) {
+  // Backward-compatible wrapper — returns parent amount
+  return calcParentAmount(tuition, monthKey, nonDemoAtt)
 }
 export function isBillingEligible(tuition, pendingComm) {
   if (!tuition) return false
@@ -98,7 +266,7 @@ export function buildTutorWAMessage({ tuition, tutor, senderName }) {
     '',
     '*Final Class Plan & Fee Structure*',
     `• Weekly ${daysCount} days, ${tuition.duration} hours/day`,
-    `• Fee: ₹${tuition.feeTutor}/${tuition.feeType} (Offline class)`,
+    `• Fee: ₹${tuition.feeTutor}/${tuition.tutorFeeType || tuition.feeType} (Offline class)`,
     '',
     '*Deduction & Payment Terms*',
     `• ProTutor's fee: ₹${tuition.commission || '—'} (2 weeks fee)`,
@@ -144,7 +312,7 @@ export function buildParentWAMessage({ tuition, tutor, senderName }) {
     '',
     '*Class Details*',
     `• ${daysCount} days/week, ${tuition.duration} hours/day`,
-    `• Fee: ₹${tuition.feeParent}/${tuition.feeType}`,
+    `• Fee: ₹${tuition.feeParent}/${tuition.parentFeeType || tuition.feeType}`,
     '',
     '*Payment Policy*',
     'All payments must be made only to ProTutor via the official payment link.',

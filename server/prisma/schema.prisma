@@ -64,7 +64,10 @@ model Tuition {
   feeParent     Int
   feeCompany    Int
   commission    Int      @default(0)
-  feeType       String   // Monthly | Session | Hourly
+  feeType       String   // Monthly | Session | Hourly (legacy — kept for compatibility)
+  parentFeeType String?  // Monthly | Hourly | Session
+  tutorFeeType  String?  // Monthly | Hourly | Session
+  calcMode      String?  @default("calendar") // calendar | fixed (Case 1 only)
   repeatPayment Boolean  @default(false)
   tutorId       Int?
   demo          String?  // YYYY-MM-DD
@@ -140,6 +143,9 @@ model Billing {
   snapFeeParent    Int
   snapFeeTutor     Int
   snapFeeType      String
+  snapParentFeeType String @default("")
+  snapTutorFeeType  String @default("")
+  snapCalcMode      String @default("calendar")
   snapCommission   Int
   snapDays         String[]
   snapDuration     String

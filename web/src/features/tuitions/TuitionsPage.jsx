@@ -25,8 +25,8 @@ function exportToCSV(rows, tutors) {
   const headers = [
     'Start Date','Tuition Status','Enq ID','Student Name','Parent Name',
     'Mobile Number','Standard & Board','Tutor Name','Tutor Number',
-    'No. of Days','Duration','Fee (Parent)','Repeat','Fee (Tutor)',
-    'Fee (Company)','One-Time Fee'
+    'No. of Days','Duration','Fee (Parent)','Parent Fee Type','Repeat','Fee (Tutor)',
+    'Tutor Fee Type','Fee (Company)','One-Time Fee'
   ]
 
   const csvRows = rows.map((t) => {
@@ -45,8 +45,10 @@ function exportToCSV(rows, tutors) {
       t.days?.length || '',
       t.duration ? `${t.duration}hr` : '',
       t.feeParent || '',
+      t.parentFeeType || t.feeType || '',
       t.repeatPayment ? 'Yes' : 'No',
       t.feeTutor || '',
+      t.tutorFeeType || t.feeType || '',
       t.feeCompany || '',
       t.commission || '',
     ]

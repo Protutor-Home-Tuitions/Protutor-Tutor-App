@@ -99,7 +99,7 @@ export default function TuitionRow({ tuition: t, prevMonth, onView, onEdit, onTo
         ) : <span className="text-slate-400">—</span>}
       </td>
       <td className="px-4 py-3 whitespace-nowrap">
-        <div className="font-semibold text-sm">₹{t.feeParent}<span className="text-xs text-slate-400 font-normal">/{t.feeType}</span></div>
+        <div className="font-semibold text-sm">₹{t.feeParent}<span className="text-xs text-slate-400 font-normal">/{t.parentFeeType || t.feeType}</span></div>
         <div className="text-xs mt-0.5" style={{ color: t.repeatPayment ? 'var(--success)' : 'var(--text3)' }}>
           {t.repeatPayment ? '↻ Repeat' : 'No repeat'}
         </div>

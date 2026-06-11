@@ -87,7 +87,7 @@ export default function TuitionDetailModal({ tuitionId, onClose }) {
               </div>
               <div className="text-sm text-slate-500 mt-1">Student: {t.studentName}</div>
               <div className="text-sm text-slate-500 mt-0.5">
-                {t.days?.length} days/week · {t.duration}hr/day · ₹{t.feeParent}/{t.feeType}
+                {t.days?.length} days/week · {t.duration}hr/day · ₹{t.feeParent}/{t.parentFeeType || t.feeType}
               </div>
               <div className="text-sm text-slate-400 mt-0.5">
                 Demo: {fd(t.demo)||'—'} &nbsp;·&nbsp; Start: {fd(t.start)} &nbsp;·&nbsp; {tutor?.name||'—'}

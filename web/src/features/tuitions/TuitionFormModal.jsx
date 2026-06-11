@@ -7,7 +7,7 @@ import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
-import { ALL_CITIES, BOARDS, DAYS_OF_WEEK } from '@/utils/helpers'
+import { ALL_CITIES, BOARDS, DAYS_OF_WEEK, estimateCompanyFee } from '@/utils/helpers'
 
 const SUBJECTS = ['Mathematics','Physics','Chemistry','Biology','English','Social','Science','EVS','Hindi','Tamil','Kannada','Marathi','Telugu','Computer Science','Economics','Accountancy','Phonics','Others']
 const FEE_TYPES = ['Monthly','Session','Hourly']
@@ -36,7 +36,9 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
   const [feeParent,    setFeeParent]    = useState(existing?.feeParent    || '')
   const [feeTutor,     setFeeTutor]     = useState(existing?.feeTutor     || '')
   const [commission,   setCommission]   = useState(existing?.commission   || '')
-  const [feeType,      setFeeType]      = useState(existing?.feeType      || 'Monthly')
+  const [parentFeeType, setParentFeeType] = useState(existing?.parentFeeType || existing?.feeType || 'Monthly')
+  const [tutorFeeType,  setTutorFeeType]  = useState(existing?.tutorFeeType  || existing?.feeType || 'Monthly')
+  const [calcMode,      setCalcMode]      = useState(existing?.calcMode      || 'calendar')
   const [repeatPayment,setRepeatPayment]= useState(existing?.repeatPayment|| false)
   const [tutorId,      setTutorId]      = useState(existing?.tutorId      || '')
   const [tutorSearch,  setTutorSearch]  = useState(() => {
@@ -79,6 +81,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
     if (!feeParent)          { setError('Fee (Parent) is required.'); return }
     if (!feeTutor)           { setError('Fee (Tutor) is required.'); return }
     if (days.length === 0)   { setError('Select at least one day.'); return }
+    if (parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly') { setError('Parent Monthly + Tutor Hourly/Session is not supported. Please change the fee type combination.'); return }
 
     // Check duplicate enqId
     const dupEnq = tuitions.find((t) => t.enqId?.toLowerCase() === enqId.toLowerCase() && t.id !== tuitionId)
@@ -94,9 +97,13 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
       subjects, days, duration,
       feeParent: parseInt(feeParent),
       feeTutor: parseInt(feeTutor),
-      feeCompany: parseInt(feeParent) - parseInt(feeTutor),
+      feeCompany: estimateCompanyFee({ feeParent: parseInt(feeParent), feeTutor: parseInt(feeTutor), parentFeeType, tutorFeeType, duration, days }) ?? (parseInt(feeParent) - parseInt(feeTutor)),
       commission: commission ? parseInt(commission) : 0,
-      feeType, repeatPayment,
+      feeType: parentFeeType, // backward compatibility
+      parentFeeType,
+      tutorFeeType,
+      calcMode: (parentFeeType === 'Monthly' && tutorFeeType === 'Monthly') ? calcMode : null,
+      repeatPayment,
       tutorId: tutorId ? parseInt(tutorId) : null,
       demo: demo || null,
       start: start || null,
@@ -331,28 +338,60 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
         {/* Fee */}
         <div>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 pb-2 border-b border-slate-100">Fee Details</p>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fee Type</label>
-              <select value={feeType} onChange={(e) => setFeeType(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                {FEE_TYPES.map((f) => <option key={f}>{f}</option>)}
-              </select>
-            </div>
+
+          {/* Row 1: Parent fee + type, Tutor fee + type */}
+          <div className="grid grid-cols-2 gap-4 mb-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fee (Parent) ₹ <span className="text-red-500">*</span></label>
               <input type="number" value={feeParent} onChange={(e) => setFeeParent(e.target.value)} placeholder="e.g. 4000"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select value={parentFeeType} onChange={(e) => setParentFeeType(e.target.value)}
+                className="w-full mt-1.5 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                {FEE_TYPES.map((f) => <option key={f}>{f}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fee (Tutor) ₹ <span className="text-red-500">*</span></label>
               <input type="number" value={feeTutor} onChange={(e) => setFeeTutor(e.target.value)} placeholder="e.g. 3000"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select value={tutorFeeType} onChange={(e) => setTutorFeeType(e.target.value)}
+                className="w-full mt-1.5 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                {FEE_TYPES.map((f) => <option key={f}>{f}</option>)}
+              </select>
               <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
                 Tutor sees this as their fee
               </p>
             </div>
+          </div>
+
+          {/* Blocked combination warning */}
+          {parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly' && (
+            <div className="mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              Parent Monthly + Tutor {tutorFeeType} is not supported.
+            </div>
+          )}
+
+          {/* CalcMode toggle — only when both Monthly */}
+          {parentFeeType === 'Monthly' && tutorFeeType === 'Monthly' && (
+            <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-200">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Calculation</span>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                <input type="radio" name="calcMode" checked={calcMode === 'calendar'} onChange={() => setCalcMode('calendar')}
+                  className="accent-blue-600" />
+                Calendar days
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                <input type="radio" name="calcMode" checked={calcMode === 'fixed'} onChange={() => setCalcMode('fixed')}
+                  className="accent-blue-600" />
+                Fixed (×4 weeks)
+              </label>
+            </div>
+          )}
+
+          {/* Row 2: One-time fee + Repeat */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">One-Time Fee ₹</label>
               <input type="number" value={commission} onChange={(e) => setCommission(e.target.value)} placeholder="e.g. 1500"
@@ -367,11 +406,25 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               </label>
             </div>
           </div>
-          {feeParent && feeTutor && (
-            <div className="mt-3 px-4 py-3 bg-blue-50 rounded-lg text-sm">
-              <span className="text-slate-600">Fee to Company: </span>
-              <strong className="text-blue-700">₹{parseInt(feeParent||0) - parseInt(feeTutor||0)}</strong>
-              <span className="text-slate-400 text-xs ml-2">({feeType})</span>
+
+          {/* Fee to Company estimate */}
+          {feeParent && feeTutor && !(parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly') && (
+            <div className="mt-3 px-4 py-3 bg-blue-50 rounded-lg text-sm flex items-center justify-between">
+              <div>
+                <span className="text-slate-600">Fee to Company: </span>
+                <strong className="text-blue-700">
+                  {parentFeeType === tutorFeeType
+                    ? `₹${parseInt(feeParent||0) - parseInt(feeTutor||0)}`
+                    : `~₹${estimateCompanyFee({ feeParent: parseInt(feeParent), feeTutor: parseInt(feeTutor), parentFeeType, tutorFeeType, duration, days }) ?? '—'}`
+                  }
+                </strong>
+                <span className="text-slate-400 text-xs ml-2">
+                  {parentFeeType === tutorFeeType
+                    ? `(${parentFeeType})`
+                    : '(estimated / month)'
+                  }
+                </span>
+              </div>
             </div>
           )}
         </div>
