@@ -27,12 +27,17 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
   const [studentName,  setStudentName]  = useState(existing?.studentName  || '')
   const [parentName,   setParentName]   = useState(existing?.parentName   || '')
   const [parentPhone,  setParentPhone]  = useState(existing?.parentPhone  || '')
-  const [standard,     setStandard]     = useState(existing?.standard     || '10th')
-  const [board,        setBoard]        = useState(existing?.board        || 'CBSE')
-  const [city,         setCity]         = useState(existing?.city         || 'Chennai')
+  const [standard,     setStandard]     = useState(existing?.standard     || '')
+  const [board,        setBoard]        = useState(existing?.board        || '')
+  const [city,         setCity]         = useState(() => {
+    if (existing?.city) return existing.city
+    const userCities = user?.cities || []
+    if (userCities.length === 1) return userCities[0]
+    return ''
+  })
   const [subjects,     setSubjects]     = useState(existing?.subjects     || [])
   const [days,         setDays]         = useState(existing?.days         || [])
-  const [duration,     setDuration]     = useState(existing?.duration     || '1')
+  const [duration,     setDuration]     = useState(existing?.duration     || '')
   const [feeParent,    setFeeParent]    = useState(existing?.feeParent    || '')
   const [feeTutor,     setFeeTutor]     = useState(existing?.feeTutor     || '')
   const [commission,   setCommission]   = useState(existing?.commission   || '')
@@ -65,7 +70,11 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
   const [start,        setStart]        = useState(existing?.start        || '')
   const [enqId, setEnqId] = useState(existing?.enqId || '')
   const [error,        setError]        = useState('')
+  const [warnings,     setWarnings]     = useState([])
+  const [softConfirmed,setSoftConfirmed] = useState(false)
   const [saving,       setSaving]       = useState(false)
+
+  function resetSoftConfirm() { setSoftConfirmed(false); setWarnings([]) }
 
   function toggleSubject(s) {
     setSubjects((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])
@@ -76,16 +85,40 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
 
   async function handleSave() {
     setError('')
-    if (!studentName.trim()) { setError('Student name is required.'); return }
-    if (!parentPhone.trim()) { setError('Parent phone is required.'); return }
-    if (!feeParent)          { setError('Fee (Parent) is required.'); return }
-    if (!feeTutor)           { setError('Fee (Tutor) is required.'); return }
-    if (days.length === 0)   { setError('Select at least one day.'); return }
-    if (parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly') { setError('Parent Monthly + Tutor Hourly/Session is not supported. Please change the fee type combination.'); return }
+    setWarnings([])
+
+    // ── Strict mandatory checks ──
+    const enqPattern = /^[A-Z]{3}-\d{4}-\d{3}$/
+    if (!enqId.trim())                { setError('Enquiry ID is required.'); return }
+    if (!enqPattern.test(enqId))      { setError('Enquiry ID must be format: ABC-1234-567 (3 letters - 4 numbers - 3 numbers).'); return }
+    if (!studentName.trim())          { setError('Student name is required.'); return }
+    if (!parentName.trim())           { setError('Parent name is required.'); return }
+    if (!parentPhone.trim())          { setError('Parent phone is required.'); return }
+    if (parentPhone.replace(/\D/g,'').length !== 10) { setError('Parent phone must be 10 digits.'); return }
+    if (!standard)                    { setError('Standard is required.'); return }
+    if (!board)                       { setError('Board is required.'); return }
+    if (!city)                        { setError('City is required.'); return }
+    if (subjects.length === 0)        { setError('Select at least one subject.'); return }
+    if (days.length === 0)            { setError('Select at least one day.'); return }
+    if (!duration)                    { setError('Duration is required.'); return }
+    if (!start)                       { setError('Start date is required.'); return }
+    if (!feeParent)                   { setError('Fee (Parent) is required.'); return }
+    if (!feeTutor)                    { setError('Fee (Tutor) is required.'); return }
+    if (parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly') { setError('Parent Monthly + Tutor Hourly/Session is not a supported combination.'); return }
 
     // Check duplicate enqId
     const dupEnq = tuitions.find((t) => t.enqId?.toLowerCase() === enqId.toLowerCase() && t.id !== tuitionId)
     if (dupEnq) { setError('Enquiry ID already exists. Please use a different one.'); return }
+
+    // ── Soft mandatory — collect warnings ──
+    const warns = []
+    if (!tutorId)     warns.push('Tutor not assigned — you can assign later.')
+    if (!demo)        warns.push('Demo date not set.')
+    if (!commission)  warns.push('One-time fee not set — you can update later.')
+    if (warns.length > 0 && !softConfirmed) {
+      setWarnings(warns)
+      return
+    }
 
     setSaving(true)
     const payload = {
@@ -133,13 +166,32 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} loading={saving}>
+          <Button id="protutor-save-btn" onClick={handleSave} loading={saving}>
             {isEdit ? 'Save Changes' : 'Add Tuition'}
           </Button>
         </>
       }
     >
       {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+      {warnings.length > 0 && !softConfirmed && (
+        <div className="mb-4 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-yellow-800 text-sm font-semibold mb-2">⚠ Please note:</p>
+          <ul className="list-disc list-inside space-y-1">
+            {warnings.map((w, i) => <li key={i} className="text-yellow-700 text-sm">{w}</li>)}
+          </ul>
+          <div className="flex gap-2 mt-3">
+            <button type="button"
+              onClick={() => { setSoftConfirmed(true); setTimeout(() => document.getElementById('protutor-save-btn')?.click(), 50) }}
+              className="px-4 py-1.5 bg-yellow-500 text-white text-sm font-semibold rounded-lg hover:bg-yellow-600">
+              Save anyway
+            </button>
+            <button type="button" onClick={() => setWarnings([])}
+              className="px-4 py-1.5 bg-white border border-yellow-300 text-yellow-700 text-sm font-semibold rounded-lg hover:bg-yellow-50">
+              Go back and fill
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-5">
         {/* Enquiry ID */}
@@ -170,6 +222,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">City</label>
             <select value={city} onChange={(e) => setCity(e.target.value)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Select city</option>
               {ALL_CITIES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
@@ -198,6 +251,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Standard</label>
               <select value={standard} onChange={(e) => setStandard(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Select standard</option>
                 {STANDARDS.map((s) => <option key={s}>{s}</option>)}
               </select>
             </div>
@@ -205,6 +259,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Board</label>
               <select value={board} onChange={(e) => setBoard(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Select board</option>
                 {BOARDS.map((b) => <option key={b}>{b}</option>)}
               </select>
             </div>
@@ -306,6 +361,7 @@ export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Duration (hr/day)</label>
               <select value={duration} onChange={(e) => setDuration(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Select duration</option>
                 {DURATIONS.map((d) => <option key={d} value={d}>{d} hr</option>)}
               </select>
             </div>

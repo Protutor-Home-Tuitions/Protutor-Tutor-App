@@ -72,16 +72,6 @@ function exportToCSV(rows, tutors) {
 const HEADERS = ['Enquiry','Start','Parent / Student','Std · Board','Schedule','Tutor','Fee / Type','Last Att','Status','Prev Month','Actions']
 
 export default function TuitionsPage() {
-  const [search,        setSearch]        = useState('')
-  const [filter,        setFilter]        = useState('all')
-  const [cityFilter,    setCityFilter]    = useState('')
-  const [detailId,      setDetailId]      = useState(null)
-  const [editId,        setEditId]        = useState(null)   // tuition UUID being edited
-  const [addOpen,       setAddOpen]       = useState(false)  // add tuition modal
-  const [openMenuId,    setOpenMenuId]    = useState(null)
-  const [confirmToggle, setConfirmToggle] = useState(null)
-  const [toggling,      setToggling]      = useState(false)
-
   const tuitions       = useDataStore((s) => s.tuitions)
   const tutors         = useDataStore((s) => s.tutors)
   const updateTuition  = useDataStore((s) => s.updateTuition)
@@ -89,6 +79,21 @@ export default function TuitionsPage() {
   const isManager      = user?.role === 'manager'
   const isCoordinator  = user?.role === 'coordinator'
   const canWrite       = isManager || isCoordinator
+
+  // Smart city default — auto-select if only 1 city assigned
+  const defaultCity = (!user || user.role === 'manager' || !user.cities?.length || user.cities.length > 1)
+    ? '' : user.cities[0]
+
+  const [search,        setSearch]        = useState('')
+  const [filter,        setFilter]        = useState('active')      // default: active only
+  const [cityFilter,    setCityFilter]    = useState(defaultCity)   // default: assigned city if single
+  const [lastAttFilter, setLastAttFilter] = useState('')            // '' | '3days' | '7days' | 'never'
+  const [detailId,      setDetailId]      = useState(null)
+  const [editId,        setEditId]        = useState(null)
+  const [addOpen,       setAddOpen]       = useState(false)
+  const [openMenuId,    setOpenMenuId]    = useState(null)
+  const [confirmToggle, setConfirmToggle] = useState(null)
+  const [toggling,      setToggling]      = useState(false)
 
   const cityAllowed = (city) => {
     if (!user) return false
@@ -99,22 +104,45 @@ export default function TuitionsPage() {
 
   const prevMonth = getPrevMonth()
 
-  const filtered = useMemo(() => [...tuitions].sort((a, b) => (b.start || '').localeCompare(a.start || '')).filter((t) => {
-    if (!cityAllowed(t.city || '')) return false
-    if (filter === 'active'   && !t.active) return false
-    if (filter === 'inactive' &&  t.active) return false
-    if (cityFilter && t.city !== cityFilter) return false
-    if (search) {
-      const q = search.toLowerCase()
-      return (
-        t.studentName?.toLowerCase().includes(q) ||
-        t.parentName?.toLowerCase().includes(q)  ||
-        t.parentPhone?.includes(q)               ||
-        t.enqId?.toLowerCase().includes(q)
-      )
-    }
-    return true
-  }), [tuitions, search, filter, cityFilter, user])
+  const filtered = useMemo(() => {
+    const today = new Date()
+    return [...tuitions]
+      .sort((a, b) => (b.start || '').localeCompare(a.start || ''))
+      .filter((t) => {
+        // City access control
+        if (!cityAllowed(t.city || '')) return false
+
+        // Status filter — uses status field with fallback
+        const tStatus = t.status || (t.active ? 'active' : 'inactive')
+        if (filter === 'active'   && tStatus !== 'active')   return false
+        if (filter === 'idle'     && tStatus !== 'idle')     return false
+        if (filter === 'inactive' && tStatus !== 'inactive') return false
+
+        // City filter
+        if (cityFilter && t.city !== cityFilter) return false
+
+        // Last attendance filter
+        if (lastAttFilter) {
+          const lastDate  = t.lastAttDate ? new Date(t.lastAttDate + 'T00:00:00') : null
+          const diffDays  = lastDate ? Math.floor((today - lastDate) / 86400000) : Infinity
+          if (lastAttFilter === '3days' && diffDays < 3)  return false
+          if (lastAttFilter === '7days' && diffDays < 7)  return false
+          if (lastAttFilter === 'never' && lastDate)      return false
+        }
+
+        // Search
+        if (search) {
+          const q = search.toLowerCase()
+          return (
+            t.studentName?.toLowerCase().includes(q) ||
+            t.parentName?.toLowerCase().includes(q)  ||
+            t.parentPhone?.includes(q)               ||
+            t.enqId?.toLowerCase().includes(q)
+          )
+        }
+        return true
+      })
+  }, [tuitions, search, filter, cityFilter, lastAttFilter, user])
 
   function handleToggle(tuitionId, action) {
     const t = tuitions.find((t) => t.id === tuitionId)
@@ -169,19 +197,36 @@ export default function TuitionsPage() {
         <input type="text" placeholder="Search student, parent, phone, ID..."
           value={search} onChange={(e) => setSearch(e.target.value)}
           className="pl-4 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+        {/* Status filter */}
         <select value={filter} onChange={(e) => setFilter(e.target.value)}
           className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white">
           <option value="all">All Status</option>
           <option value="active">Active</option>
+          <option value="idle">Idle</option>
           <option value="inactive">Inactive</option>
         </select>
+
+        {/* City filter */}
         <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}
           className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white">
           <option value="">All Cities</option>
           {ALL_CITIES.map((c) => <option key={c}>{c}</option>)}
         </select>
-        {(search || filter !== 'all' || cityFilter) && (
-          <button onClick={() => { setSearch(''); setFilter('all'); setCityFilter('') }}
+
+        {/* Last attendance filter */}
+        <select value={lastAttFilter} onChange={(e) => setLastAttFilter(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white">
+          <option value="">All Last Att</option>
+          <option value="3days">3+ days ago</option>
+          <option value="7days">7+ days ago</option>
+          <option value="never">Never marked</option>
+        </select>
+
+        {/* Clear filters — reset to defaults */}
+        {(search || filter !== 'active' || cityFilter !== defaultCity || lastAttFilter) && (
+          <button
+            onClick={() => { setSearch(''); setFilter('active'); setCityFilter(defaultCity); setLastAttFilter('') }}
             className="text-xs text-slate-500 hover:text-slate-700 underline">
             Clear filters
           </button>
