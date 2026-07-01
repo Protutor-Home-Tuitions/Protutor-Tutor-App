@@ -55,9 +55,10 @@ async function exportToXLSX(rows, tutors, completions = {}) {
     const schedule = (t.duration && t.days?.length) ? `${t.duration}/${t.days.length}` : ''
     const feeCompany = t.feeCompany || 0
 
-    // Combined fee/type strings — remove "ly" from Monthly/Hourly
-    const pFeeType = (t.parentFeeType || t.feeType || '').replace('ly', '')
-    const tFeeType = (t.tutorFeeType || t.feeType || '').replace('ly', '')
+    // Combined fee/type strings — short labels
+    const FEE_SHORT = { Monthly: 'Mon', Hourly: 'Hr', Session: 'Ssn' }
+    const pFeeType = FEE_SHORT[t.parentFeeType || t.feeType] || ''
+    const tFeeType = FEE_SHORT[t.tutorFeeType || t.feeType] || ''
     const feeParentStr = t.feeParent ? `${t.feeParent}/${pFeeType}` : ''
     const feeTutorStr  = t.feeTutor  ? `${t.feeTutor}/${tFeeType}` : ''
 
