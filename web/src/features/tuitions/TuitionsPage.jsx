@@ -23,6 +23,7 @@ function formatStartDate(dateStr) {
 }
 
 async function exportToXLSX(rows, tutors, completions = {}) {
+  try {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Tuitions')
 
@@ -33,11 +34,6 @@ async function exportToXLSX(rows, tutors, completions = {}) {
     'Tutor Fee Type','Fee (Company)','One-Time Fee','Repeat',
     'Last Att','Days Ago','Submitted'
   ]
-
-  // Default font for entire sheet
-  ws.eachRow({ includeEmpty: true }, (row) => {
-    row.font = { name: 'Calibri', size: 11 }
-  })
 
   // Header row
   const headerRow = ws.addRow(headers)
@@ -194,6 +190,10 @@ async function exportToXLSX(rows, tutors, completions = {}) {
   a.download = `tuitions-${new Date().toISOString().slice(0, 10)}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('XLSX export error:', err)
+    alert('Export failed: ' + err.message)
+  }
 }
 
 
