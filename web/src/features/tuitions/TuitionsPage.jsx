@@ -6,6 +6,7 @@ import TuitionDetailModal from './TuitionDetailModal'
 import TuitionFormModal from './TuitionFormModal'
 import Button from '@/components/ui/Button'
 import { ALL_CITIES } from '@/utils/helpers'
+import ExcelJS from 'exceljs'
 
 function getPrevMonth() {
   const now = new Date()
@@ -21,18 +22,34 @@ function formatStartDate(dateStr) {
   return `${MN_SHORT[parseInt(m)-1]}-${String(parseInt(d)).padStart(2,'0')}`
 }
 
-function exportToCSV(rows, tutors) {
+async function exportToXLSX(rows, tutors) {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Tuitions')
+
   const headers = [
-    'Start Date','Tuition Status','Enq ID','Student Name','Parent Name',
-    'Mobile Number','Standard & Board','Tutor Name','Tutor Number',
-    'No. of Days','Duration','Fee (Parent)','Parent Fee Type','Repeat','Fee (Tutor)',
+    'Start Date','Status','Enq ID','Student Name','Parent Name',
+    'Mobile Number','Std & Board','Tutor Name','Tutor Number',
+    'Schedule','Fee (Parent)','Parent Fee Type','Repeat','Fee (Tutor)',
     'Tutor Fee Type','Fee (Company)','One-Time Fee'
   ]
 
-  const csvRows = rows.map((t) => {
+  // Header row
+  const headerRow = ws.addRow(headers)
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }
+    cell.alignment = { horizontal: 'center', vertical: 'middle' }
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } }
+  })
+
+  // Data rows
+  rows.forEach((t) => {
     const tutor = tutors.find((tu) => tu.id === t.tutorId)
     const status = t.status || (t.active ? 'active' : 'inactive')
-    return [
+    const isFixed = t.calcMode === 'fixed'
+    const schedule = (t.duration && t.days?.length) ? `${t.duration}/${t.days.length}` : ''
+
+    const row = ws.addRow([
       formatStartDate(t.start),
       status.charAt(0).toUpperCase() + status.slice(1),
       t.enqId || '',
@@ -42,8 +59,7 @@ function exportToCSV(rows, tutors) {
       `${t.standard || ''} ${t.board || ''}`.trim(),
       tutor?.name || '',
       tutor?.phone || '',
-      t.days?.length || '',
-      t.duration ? `${t.duration}hr` : '',
+      schedule,
       t.feeParent || '',
       t.parentFeeType || t.feeType || '',
       t.repeatPayment ? 'Yes' : 'No',
@@ -51,20 +67,36 @@ function exportToCSV(rows, tutors) {
       t.tutorFeeType || t.feeType || '',
       t.feeCompany || '',
       t.commission || '',
-    ]
+    ])
+
+    // Highlight schedule cell with light yellow if fixed calcMode
+    if (isFixed) {
+      const scheduleCell = row.getCell(10) // Schedule is column 10
+      scheduleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDE7' } }
+      scheduleCell.font = { bold: true }
+    }
   })
 
-  const escape = (v) => `"${String(v).replace(/"/g, '""')}"`
-  const content = [
-    headers.map(escape).join(','),
-    ...csvRows.map((r) => r.map(escape).join(','))
-  ].join('\n')
+  // Auto-fit column widths
+  ws.columns.forEach((col) => {
+    let maxLen = 10
+    col.eachCell({ includeEmpty: true }, (cell) => {
+      const len = cell.value ? String(cell.value).length + 2 : 10
+      if (len > maxLen) maxLen = len
+    })
+    col.width = Math.min(maxLen, 30)
+  })
 
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = `tuitions-${new Date().toISOString().slice(0,10)}.csv`
+  // Freeze header row
+  ws.views = [{ state: 'frozen', ySplit: 1 }]
+
+  // Download
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `tuitions-${new Date().toISOString().slice(0,10)}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -178,12 +210,12 @@ export default function TuitionsPage() {
         <div className="flex items-center gap-2">
           {isManager && (
             <button
-              onClick={() => exportToCSV(filtered, tutors)}
+              onClick={() => exportToXLSX(filtered, tutors)}
               className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 bg-white">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              Export CSV
+              Export XLSX
             </button>
           )}
           {canWrite && (
