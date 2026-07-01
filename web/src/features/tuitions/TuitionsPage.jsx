@@ -22,32 +22,53 @@ function formatStartDate(dateStr) {
   return `${MN_SHORT[parseInt(m)-1]}-${String(parseInt(d)).padStart(2,'0')}`
 }
 
-async function exportToXLSX(rows, tutors) {
+async function exportToXLSX(rows, tutors, completions = {}) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Tuitions')
 
   const headers = [
     'Start Date','Status','Enq ID','Student Name','Parent Name',
     'Mobile Number','Std & Board','Tutor Name','Tutor Number',
-    'Schedule','Fee (Parent)','Parent Fee Type','Repeat','Fee (Tutor)',
-    'Tutor Fee Type','Fee (Company)','One-Time Fee'
+    'Schedule','Fee (Parent)','Parent Fee Type','Fee (Tutor)',
+    'Tutor Fee Type','Fee (Company)','One-Time Fee','Repeat',
+    'Last Att','Days Ago','Submitted'
   ]
+
+  // Default font for entire sheet
+  ws.eachRow({ includeEmpty: true }, (row) => {
+    row.font = { name: 'Calibri', size: 11 }
+  })
 
   // Header row
   const headerRow = ws.addRow(headers)
   headerRow.eachCell((cell) => {
-    cell.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
+    cell.font = { name: 'Calibri', bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
     cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } }
   })
 
-  // Data rows
+  const today = new Date()
+  const prevMK = today.getMonth() === 0
+    ? `${today.getFullYear() - 1}-12`
+    : `${today.getFullYear()}-${String(today.getMonth()).padStart(2, '0')}`
+
   rows.forEach((t) => {
     const tutor = tutors.find((tu) => tu.id === t.tutorId)
     const status = t.status || (t.active ? 'active' : 'inactive')
     const isFixed = t.calcMode === 'fixed'
     const schedule = (t.duration && t.days?.length) ? `${t.duration}/${t.days.length}` : ''
+    const feeCompany = t.feeCompany || 0
+
+    // Last att calculation
+    const lastAttDate = t.lastAttDate || null
+    const daysAgo = lastAttDate
+      ? Math.floor((today - new Date(lastAttDate + 'T00:00:00')) / 86400000)
+      : null
+
+    // Submitted check — prev month completion
+    const compKey = `${t.enqId}_${prevMK}`
+    const isSubmitted = !!completions[compKey]
 
     const row = ws.addRow([
       formatStartDate(t.start),
@@ -62,18 +83,92 @@ async function exportToXLSX(rows, tutors) {
       schedule,
       t.feeParent || '',
       t.parentFeeType || t.feeType || '',
-      t.repeatPayment ? 'Yes' : 'No',
       t.feeTutor || '',
       t.tutorFeeType || t.feeType || '',
-      t.feeCompany || '',
+      feeCompany,
       t.commission || '',
+      t.repeatPayment ? 'Yes' : 'No',
+      lastAttDate ? formatStartDate(lastAttDate) : '—',
+      daysAgo !== null ? daysAgo : 'Never',
+      isSubmitted ? 'Yes' : 'No',
     ])
 
-    // Highlight schedule cell with light yellow if fixed calcMode
+    // Default font for all cells
+    row.eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11 }
+    })
+
+    // ── Schedule column (col 10) — always bold ──
+    const scheduleCell = row.getCell(10)
+    scheduleCell.font = { name: 'Calibri', size: 11, bold: true }
     if (isFixed) {
-      const scheduleCell = row.getCell(10) // Schedule is column 10
-      scheduleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDE7' } }
-      scheduleCell.font = { bold: true }
+      scheduleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4FF' } }
+      scheduleCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E40AF' } }
+    }
+
+    // ── Fee columns — bold, size 13 ──
+    const feeFont = { name: 'Calibri', size: 13, bold: true }
+    row.getCell(11).font = feeFont // Fee (Parent)
+    row.getCell(12).font = { name: 'Calibri', size: 13, bold: true } // Parent Fee Type
+    row.getCell(13).font = feeFont // Fee (Tutor)
+    row.getCell(14).font = { name: 'Calibri', size: 13, bold: true } // Tutor Fee Type
+
+    // ── Fee (Company) — red if negative ──
+    const feeCompanyCell = row.getCell(15)
+    if (Number(feeCompany) < 0) {
+      feeCompanyCell.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFDC2626' } }
+    } else {
+      feeCompanyCell.font = feeFont
+    }
+
+    // ── Status column (col 2) — color by status ──
+    const statusCell = row.getCell(2)
+    if (status === 'inactive') {
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }
+      statusCell.font = { name: 'Calibri', size: 11, color: { argb: 'FFB91C1C' } }
+    } else if (status === 'idle') {
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
+      statusCell.font = { name: 'Calibri', size: 11, color: { argb: 'FF475569' } }
+    }
+
+    // ── No tutor assigned — light orange ──
+    if (!tutor) {
+      row.getCell(8).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }
+      row.getCell(8).font = { name: 'Calibri', size: 11, color: { argb: 'FFC2410C' } }
+      row.getCell(8).value = 'Not Assigned'
+    }
+
+    // ── Zero one-time fee — light yellow ──
+    const commCell = row.getCell(16)
+    if (!t.commission || Number(t.commission) === 0) {
+      commCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDE7' } }
+    }
+
+    // ── Repeat = Yes — blue highlight ──
+    const repeatCell = row.getCell(17)
+    if (t.repeatPayment) {
+      repeatCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }
+      repeatCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E40AF' } }
+    }
+
+    // ── Days Ago column (col 19) — color code ──
+    const daysAgoCell = row.getCell(19)
+    if (daysAgo !== null && daysAgo > 7) {
+      daysAgoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }
+      daysAgoCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFDC2626' } }
+    } else if (daysAgo !== null && daysAgo > 3) {
+      daysAgoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }
+      daysAgoCell.font = { name: 'Calibri', size: 11, color: { argb: 'FFC2410C' } }
+    } else if (daysAgo === null) {
+      daysAgoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }
+      daysAgoCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFDC2626' } }
+    }
+
+    // ── Submitted = Yes — green highlight ──
+    const submittedCell = row.getCell(20)
+    if (isSubmitted) {
+      submittedCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }
+      submittedCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF166534' } }
     }
   })
 
@@ -96,16 +191,18 @@ async function exportToXLSX(rows, tutors) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `tuitions-${new Date().toISOString().slice(0,10)}.xlsx`
+  a.download = `tuitions-${new Date().toISOString().slice(0, 10)}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
 }
+
 
 const HEADERS = ['Enquiry','Start','Parent / Student','Std · Board','Schedule','Tutor','Fee / Type','Last Att','Status','Prev Month','Actions']
 
 export default function TuitionsPage() {
   const tuitions       = useDataStore((s) => s.tuitions)
   const tutors         = useDataStore((s) => s.tutors)
+  const completions    = useDataStore((s) => s.completions) || {}
   const updateTuition  = useDataStore((s) => s.updateTuition)
   const user           = useAuthStore((s) => s.user)
   const isManager      = user?.role === 'manager'
@@ -210,7 +307,7 @@ export default function TuitionsPage() {
         <div className="flex items-center gap-2">
           {isManager && (
             <button
-              onClick={() => exportToXLSX(filtered, tutors)}
+              onClick={() => exportToXLSX(filtered, tutors, completions)}
               className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 bg-white">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
