@@ -30,9 +30,8 @@ async function exportToXLSX(rows, tutors, completions = {}) {
   const headers = [
     'Start Date','Status','Enq ID','Student Name','Parent Name',
     'Mobile Number','Std & Board','Tutor Name','Tutor Number',
-    'Schedule','Fee (Parent)','Parent Fee Type','Fee (Tutor)',
-    'Tutor Fee Type','Fee (Company)','One-Time Fee','Repeat',
-    'Last Att','Days Ago','Submitted'
+    'Schedule','Fee (Parent)','Fee (Tutor)','Fee (Company)',
+    'One-Time Fee','Repeat','Last Att','Days Ago','Submitted'
   ]
 
   // Header row
@@ -56,6 +55,12 @@ async function exportToXLSX(rows, tutors, completions = {}) {
     const schedule = (t.duration && t.days?.length) ? `${t.duration}/${t.days.length}` : ''
     const feeCompany = t.feeCompany || 0
 
+    // Combined fee/type strings — remove "ly" from Monthly/Hourly
+    const pFeeType = (t.parentFeeType || t.feeType || '').replace('ly', '')
+    const tFeeType = (t.tutorFeeType || t.feeType || '').replace('ly', '')
+    const feeParentStr = t.feeParent ? `${t.feeParent}/${pFeeType}` : ''
+    const feeTutorStr  = t.feeTutor  ? `${t.feeTutor}/${tFeeType}` : ''
+
     // Last att calculation
     const lastAttDate = t.lastAttDate || null
     const daysAgo = lastAttDate
@@ -77,10 +82,8 @@ async function exportToXLSX(rows, tutors, completions = {}) {
       tutor?.name || '',
       tutor?.phone || '',
       schedule,
-      t.feeParent || '',
-      t.parentFeeType || t.feeType || '',
-      t.feeTutor || '',
-      t.tutorFeeType || t.feeType || '',
+      feeParentStr,
+      feeTutorStr,
       feeCompany,
       t.commission || '',
       t.repeatPayment ? 'Yes' : 'No',
@@ -102,15 +105,13 @@ async function exportToXLSX(rows, tutors, completions = {}) {
       scheduleCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E40AF' } }
     }
 
-    // ── Fee columns — bold, size 13 ──
+    // ── Fee columns (col 11, 12, 13) — bold, size 13 ──
     const feeFont = { name: 'Calibri', size: 13, bold: true }
     row.getCell(11).font = feeFont // Fee (Parent)
-    row.getCell(12).font = { name: 'Calibri', size: 13, bold: true } // Parent Fee Type
-    row.getCell(13).font = feeFont // Fee (Tutor)
-    row.getCell(14).font = { name: 'Calibri', size: 13, bold: true } // Tutor Fee Type
+    row.getCell(12).font = feeFont // Fee (Tutor)
 
-    // ── Fee (Company) — red if negative ──
-    const feeCompanyCell = row.getCell(15)
+    // ── Fee (Company) col 13 — red if negative ──
+    const feeCompanyCell = row.getCell(13)
     if (Number(feeCompany) < 0) {
       feeCompanyCell.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFDC2626' } }
     } else {
@@ -127,28 +128,28 @@ async function exportToXLSX(rows, tutors, completions = {}) {
       statusCell.font = { name: 'Calibri', size: 11, color: { argb: 'FF475569' } }
     }
 
-    // ── No tutor assigned — light orange ──
+    // ── No tutor assigned (col 8) — light orange ──
     if (!tutor) {
       row.getCell(8).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }
       row.getCell(8).font = { name: 'Calibri', size: 11, color: { argb: 'FFC2410C' } }
       row.getCell(8).value = 'Not Assigned'
     }
 
-    // ── Zero one-time fee — light yellow ──
-    const commCell = row.getCell(16)
+    // ── Zero one-time fee (col 14) — light yellow ──
+    const commCell = row.getCell(14)
     if (!t.commission || Number(t.commission) === 0) {
       commCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDE7' } }
     }
 
-    // ── Repeat = Yes — blue highlight ──
-    const repeatCell = row.getCell(17)
+    // ── Repeat = Yes (col 15) — blue highlight ──
+    const repeatCell = row.getCell(15)
     if (t.repeatPayment) {
       repeatCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }
       repeatCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E40AF' } }
     }
 
-    // ── Days Ago column (col 19) — color code ──
-    const daysAgoCell = row.getCell(19)
+    // ── Days Ago column (col 17) — color code ──
+    const daysAgoCell = row.getCell(17)
     if (daysAgo !== null && daysAgo > 7) {
       daysAgoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }
       daysAgoCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFDC2626' } }
@@ -160,8 +161,8 @@ async function exportToXLSX(rows, tutors, completions = {}) {
       daysAgoCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFDC2626' } }
     }
 
-    // ── Submitted = Yes — green highlight ──
-    const submittedCell = row.getCell(20)
+    // ── Submitted = Yes (col 18) — green highlight ──
+    const submittedCell = row.getCell(18)
     if (isSubmitted) {
       submittedCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }
       submittedCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF166534' } }
