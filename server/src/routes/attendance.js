@@ -29,22 +29,6 @@ async function sendWatiTemplate(phone, templateName, parameters) {
   }
 }
 
-// ── Refresh lastAttDate on tuition after any attendance change ──
-async function refreshLastAttDate(enqId) {
-  try {
-    const latest = await prisma.attendance.findFirst({
-      where: { enqId, isDemo: false },
-      orderBy: { date: 'desc' },
-    })
-    await prisma.tuition.updateMany({
-      where: { enqId },
-      data: { lastAttDate: latest?.date || null },
-    })
-  } catch (err) {
-    console.error('refreshLastAttDate error:', err.message)
-  }
-}
-
 // ── Check if WATI should fire for attendance ──
 async function maybeNotifyAttendance(row, tuition, tutor) {
   if (row.byAdmin === true) return
@@ -80,6 +64,105 @@ async function maybeNotifyAttendance(row, tuition, tutor) {
     await sendWatiTemplate(tutor.phone, 'utility_attendance_marked', params)
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// NOTIFICATION QUEUE PROCESSOR — called by pg_cron every 2 min
+// ══════════════════════════════════════════════════════════════
+router.post('/notifications/process', async (req, res) => {
+  // Authenticate — only pg_cron should call this
+  const secret = req.headers['x-cron-secret']
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+
+  try {
+    // Pick up pending rows (max 10 per run to avoid timeout)
+    const pending = await prisma.$queryRaw`
+      UPDATE notification_queue
+      SET status = 'processing'
+      WHERE id IN (
+        SELECT id FROM notification_queue
+        WHERE status = 'pending' AND retry_count < 3
+        ORDER BY created_at ASC
+        LIMIT 10
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `
+
+    let sent = 0
+    let failed = 0
+
+    for (const item of pending) {
+      try {
+        // Fetch attendance record
+        const row = await prisma.attendance.findUnique({ where: { id: item.attendance_id } })
+        if (!row) {
+          await prisma.$executeRaw`
+            UPDATE notification_queue SET status = 'failed', error = 'Attendance record not found', processed_at = NOW()
+            WHERE id = ${item.id}::uuid
+          `
+          failed++
+          continue
+        }
+
+        // Fetch tuition
+        const tuition = await prisma.tuition.findFirst({ where: { enqId: item.enq_id } })
+        if (!tuition) {
+          await prisma.$executeRaw`
+            UPDATE notification_queue SET status = 'failed', error = 'Tuition not found', processed_at = NOW()
+            WHERE id = ${item.id}::uuid
+          `
+          failed++
+          continue
+        }
+
+        // Fetch tutor — try multiple lookups
+        const tutor = row.tutorId
+          ? await prisma.tutor.findUnique({ where: { id: row.tutorId } })
+          : tuition.tutorId
+            ? await prisma.tutor.findUnique({ where: { id: tuition.tutorId } })
+            : null
+
+        // Send WATI
+        await maybeNotifyAttendance(row, tuition, tutor)
+
+        // Mark as sent
+        await prisma.$executeRaw`
+          UPDATE notification_queue SET status = 'sent', processed_at = NOW()
+          WHERE id = ${item.id}::uuid
+        `
+        sent++
+      } catch (err) {
+        // Retry — put back to pending with incremented retry count
+        await prisma.$executeRaw`
+          UPDATE notification_queue
+          SET status = 'pending', retry_count = retry_count + 1, error = ${err.message}
+          WHERE id = ${item.id}::uuid
+        `
+        failed++
+      }
+    }
+
+    // Cleanup 1: Reset stuck 'processing' rows older than 10 minutes back to 'pending'
+    // Handles case where API crashed mid-processing
+    await prisma.$executeRaw`
+      UPDATE notification_queue
+      SET status = 'pending', retry_count = retry_count + 1
+      WHERE status = 'processing' AND created_at < NOW() - INTERVAL '10 minutes'
+    `
+
+    // Cleanup 2: Delete sent records older than 7 days
+    await prisma.$executeRaw`
+      DELETE FROM notification_queue WHERE status = 'sent' AND created_at < NOW() - INTERVAL '7 days'
+    `
+
+    res.json({ processed: pending.length, sent, failed })
+  } catch (err) {
+    console.error('Notification processor error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // GET /api/attendance/completions — all completions (for dashboard Att pill)
 router.get('/completions', requireAuth, async (req, res) => {
@@ -169,31 +252,10 @@ router.post('/', requireAuth, async (req, res) => {
       },
     })
 
+    // Response sent immediately — fast for the user
+    // lastAttDate → handled by DB trigger (100% reliable)
+    // WATI notification → handled by notification_queue + pg_cron (100% reliable)
     res.status(201).json(row)
-
-    // After response — update lastAttDate + fire WATI async
-    setImmediate(async () => {
-      // 1. Update lastAttDate for this tuition
-      if (!isDemo) await refreshLastAttDate(enqId)
-
-      // 2. Fire WATI notification
-      if (!isDemo) {
-        try {
-          const [tuition, tutorByPhone] = await Promise.all([
-            prisma.tuition.findUnique({ where: { enqId } }),
-            req.user.role === 'tutor' && req.user.phone
-              ? prisma.tutor.findUnique({ where: { phone: req.user.phone } })
-              : null,
-          ])
-          const tutor = tutorByPhone ||
-            (tutorId ? await prisma.tutor.findUnique({ where: { id: parseInt(tutorId) } }) : null) ||
-            (tuition?.tutorId ? await prisma.tutor.findUnique({ where: { id: tuition.tutorId } }) : null)
-          if (tuition) await maybeNotifyAttendance(row, tuition, tutor)
-        } catch (err) {
-          console.error('WATI notify error:', err.message)
-        }
-      }
-    })
   } catch (err) {
     console.error('attendance POST error:', err)
     res.status(500).json({ error: err.message || 'Server error' })
@@ -207,8 +269,8 @@ router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
       where: { id: req.params.id },
       data: req.body,
     })
+    // lastAttDate handled by DB trigger
     res.json(row)
-    setImmediate(() => refreshLastAttDate(row.enqId))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -217,10 +279,9 @@ router.patch('/:id', requireAuth, requireCanWrite, async (req, res) => {
 // DELETE /api/attendance/:id — admin/coordinator only
 router.delete('/:id', requireAuth, requireCanWrite, async (req, res) => {
   try {
-    const row = await prisma.attendance.findUnique({ where: { id: req.params.id } })
     await prisma.attendance.delete({ where: { id: req.params.id } })
+    // lastAttDate handled by DB trigger
     res.json({ ok: true })
-    if (row?.enqId) setImmediate(() => refreshLastAttDate(row.enqId))
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
