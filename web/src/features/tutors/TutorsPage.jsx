@@ -23,6 +23,62 @@ function ConfirmModal({ open, title, message, confirmLabel, confirmVariant = 'da
   )
 }
 
+// ── Razorpay account creation button ──
+function RazorpayButton({ tutorId, size = 'sm' }) {
+  const createRazorpayAccount = useDataStore((s) => s.createRazorpayAccount)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleCreate() {
+    setCreating(true)
+    setError('')
+    try {
+      await createRazorpayAccount(tutorId)
+    } catch (err) {
+      setError(err.message || 'Failed')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="mt-1">
+      <button onClick={handleCreate} disabled={creating}
+        className={`${size === 'xs' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'} font-medium border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50`}>
+        {creating ? 'Creating…' : 'Create RZP Account'}
+      </button>
+      {error && <p className="text-[11px] text-red-500 mt-1 max-w-[240px]">{error}</p>}
+    </div>
+  )
+}
+
+// ── Status badge — green (activated), red (rejected/suspended), amber (in progress) ──
+function RzpStatusBadge({ status }) {
+  if (!status) return null
+
+  let color, icon, label
+  if (status === 'activated') {
+    color = 'bg-green-100 text-green-700'
+    icon = '✓'
+    label = 'Activated'
+  } else if (status === 'rejected' || status === 'suspended') {
+    color = 'bg-red-100 text-red-700'
+    icon = '✕'
+    label = status.charAt(0).toUpperCase() + status.slice(1)
+  } else {
+    // created, under_review, needs_clarification
+    color = 'bg-amber-100 text-amber-700'
+    icon = '○'
+    label = status.replace(/_/g, ' ')
+  }
+
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold inline-flex items-center gap-0.5 ${color}`}>
+      {icon} {label}
+    </span>
+  )
+}
+
 // ── Read-only view modal ──
 function TutorViewModal({ tutorId, onClose }) {
   const tutors   = useDataStore((s) => s.tutors)
@@ -73,14 +129,41 @@ function TutorViewModal({ tutorId, onClose }) {
           </div>
         </div>
 
-        {/* Bank status */}
+        {/* Bank status + Razorpay */}
         <div className="px-4 py-3 bg-slate-50 rounded-lg border border-slate-100">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Bank Details</p>
           <span className={`text-xs px-2 py-1 rounded-full font-semibold ${bankSet ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
             {bankSet ? 'Bank details on file ✓' : 'No bank details'}
           </span>
-          {t.paymentAccountId && (
-            <p className="text-xs font-mono text-slate-500 mt-2">Account ID: {t.paymentAccountId}</p>
+
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Razorpay Linked Account</p>
+          {t.paymentAccountId ? (
+            <div>
+              <p className="text-xs font-mono text-slate-500">Account ID: {t.paymentAccountId}</p>
+              <div className="mt-1">
+                <RzpStatusBadge status={t.paymentAccountStatus} />
+              </div>
+              {t.paymentAccountStatus === 'activated' && (
+                <p className="text-[11px] text-green-600 mt-1">Account is active and ready for payouts.</p>
+              )}
+              {t.paymentAccountStatus === 'rejected' && (
+                <p className="text-[11px] text-red-600 mt-1">Razorpay rejected this account. Contact Razorpay support to resolve.</p>
+              )}
+              {t.paymentAccountStatus === 'suspended' && (
+                <p className="text-[11px] text-red-600 mt-1">Account is suspended. Payouts blocked until Razorpay lifts suspension.</p>
+              )}
+              {['created', 'under_review', 'needs_clarification'].includes(t.paymentAccountStatus) && (
+                <p className="text-[11px] text-amber-600 mt-1">
+                  {t.paymentAccountStatus === 'needs_clarification'
+                    ? 'Razorpay needs more information. Check Razorpay dashboard.'
+                    : 'Awaiting Razorpay activation. Status refreshes every hour.'}
+                </p>
+              )}
+            </div>
+          ) : bankSet ? (
+            <RazorpayButton tutorId={t.id} />
+          ) : (
+            <p className="text-xs text-slate-400">Bank details required first</p>
           )}
         </div>
       </div>
@@ -311,10 +394,20 @@ export default function TutorsPage() {
                       <td className="px-4 py-3 font-semibold text-sm">{t.name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{t.phone}</td>
                       <td className="px-4 py-3">
-                        <div className="text-xs font-mono text-slate-700">{t.paymentAccountId || <span className="text-slate-300">—</span>}</div>
+                        {t.paymentAccountId ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-mono text-slate-700">{t.paymentAccountId}</span>
+                            <RzpStatusBadge status={t.paymentAccountStatus} />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-300">—</span>
+                        )}
                         <span className={`text-xs px-2 py-0.5 rounded-full font-semibold mt-1 inline-block ${bankSet ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
                           {bankSet ? 'Bank ✓' : 'No bank'}
                         </span>
+                        {bankSet && !t.paymentAccountId && isManager && (
+                          <RazorpayButton tutorId={t.id} size="xs" />
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold block mb-1">{active} active</span>

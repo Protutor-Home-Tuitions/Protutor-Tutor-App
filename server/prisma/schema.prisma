@@ -33,6 +33,7 @@ model Tutor {
   active             Boolean   @default(true)
   passDigits         String    @default("")
   paymentAccountId   String    @default("") // Razorpay account ID
+  paymentAccountStatus String  @default("") // created | activated | needs_clarification | rejected | suspended | under_review
   accountHolderName  String    @default("")
   accountNumber      String    @default("")
   ifscCode           String    @default("")

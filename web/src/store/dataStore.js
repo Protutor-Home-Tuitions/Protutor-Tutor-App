@@ -80,6 +80,12 @@ export const useDataStore = create((set, get) => ({
     return tutor
   },
 
+  createRazorpayAccount: async (id) => {
+    const tutor = await api.createRazorpayAccount(id)
+    set((s) => ({ tutors: s.tutors.map((t) => (t.id === id ? tutor : t)) }))
+    return tutor
+  },
+
   addBilling: async (data) => {
     const billing = await api.createBilling(data)
     const enqId = data.enqId

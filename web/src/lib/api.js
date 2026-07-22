@@ -47,6 +47,7 @@ export const api = {
   getTutors:   ()         => request('GET',   '/tutors'),
   createTutor: (data)     => request('POST',  '/tutors', data),
   updateTutor: (id, data) => request('PATCH', `/tutors/${id}`, data),
+  createRazorpayAccount: (id) => request('POST', `/tutors/${id}/create-razorpay-account`),
 
   // Attendance
   getAttendance:   (enqId) => request('GET',    `/attendance/${enqId}`),
