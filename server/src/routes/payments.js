@@ -4,6 +4,32 @@ import { requireAuth, requireManager } from '../middleware/auth.js'
 
 const router = Router()
 
+// ── Tutor self-service: GET my payments across all my tuitions ──
+// MUST be defined before /:enqId — otherwise Express matches 'tutor' as an enqId.
+router.get('/tutor/my', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'tutor') {
+      return res.status(403).json({ error: 'Tutor access only' })
+    }
+    const tuitions = await prisma.tuition.findMany({
+      where: { tutor: { phone: req.user.phone } },
+      select: { enqId: true },
+    })
+    const enqIds = tuitions.map((t) => t.enqId)
+    if (!enqIds.length) return res.json([])
+
+    const payments = await prisma.payment.findMany({
+      where: { enqId: { in: enqIds } },
+      include: { billing: true },
+      orderBy: [{ monthKey: 'desc' }, { createdAt: 'desc' }],
+    })
+    res.json(payments)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 router.get('/:enqId', requireAuth, async (req, res) => {
   const rows = await prisma.payment.findMany({
     where: { enqId: req.params.enqId },
