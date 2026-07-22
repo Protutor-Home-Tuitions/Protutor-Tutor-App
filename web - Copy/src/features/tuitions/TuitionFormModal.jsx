@@ -1,0 +1,490 @@
+/**
+ * TuitionFormModal — Add or Edit a tuition.
+ * Migrated from admin_1.html addTuition/updateTuition forms.
+ */
+import { useState, useEffect, useRef } from 'react'
+import { useDataStore } from '@/store/dataStore'
+import { useAuthStore } from '@/store/authStore'
+import Modal from '@/components/ui/Modal'
+import Button from '@/components/ui/Button'
+import { ALL_CITIES, BOARDS, DAYS_OF_WEEK, estimateCompanyFee } from '@/utils/helpers'
+
+const SUBJECTS = ['Mathematics','Physics','Chemistry','Biology','English','Social','Science','EVS','Hindi','Tamil','Kannada','Marathi','Telugu','Computer Science','Economics','Accountancy','Phonics','Others']
+const FEE_TYPES = ['Monthly','Session','Hourly']
+const STANDARDS = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th']
+const DURATIONS = ['0.5','1','1.5','2','2.5','3']
+
+export default function TuitionFormModal({ tuitionId, onClose, onSaved }) {
+  const tuitions = useDataStore((s) => s.tuitions)
+  const tutors   = useDataStore((s) => s.tutors)
+  const addTuition    = useDataStore((s) => s.addTuition)
+  const updateTuition = useDataStore((s) => s.updateTuition)
+  const user = useAuthStore((s) => s.user)
+
+  const existing = tuitionId ? tuitions.find((t) => t.id === tuitionId) : null
+  const isEdit   = !!existing
+
+  const [studentName,  setStudentName]  = useState(existing?.studentName  || '')
+  const [parentName,   setParentName]   = useState(existing?.parentName   || '')
+  const [parentPhone,  setParentPhone]  = useState(existing?.parentPhone  || '')
+  const [standard,     setStandard]     = useState(existing?.standard     || '')
+  const [board,        setBoard]        = useState(existing?.board        || '')
+  const [city,         setCity]         = useState(() => {
+    if (existing?.city) return existing.city
+    const userCities = user?.cities || []
+    if (userCities.length === 1) return userCities[0]
+    return ''
+  })
+  const [subjects,     setSubjects]     = useState(existing?.subjects     || [])
+  const [days,         setDays]         = useState(existing?.days         || [])
+  const [duration,     setDuration]     = useState(existing?.duration     || '')
+  const [feeParent,    setFeeParent]    = useState(existing?.feeParent    || '')
+  const [feeTutor,     setFeeTutor]     = useState(existing?.feeTutor     || '')
+  const [commission,   setCommission]   = useState(existing?.commission   || '')
+  const [parentFeeType, setParentFeeType] = useState(existing?.parentFeeType || existing?.feeType || 'Monthly')
+  const [tutorFeeType,  setTutorFeeType]  = useState(existing?.tutorFeeType  || existing?.feeType || 'Monthly')
+  const [calcMode,      setCalcMode]      = useState(existing?.calcMode      || 'calendar')
+  const [repeatPayment,setRepeatPayment]= useState(existing?.repeatPayment|| false)
+  const [tutorId,      setTutorId]      = useState(existing?.tutorId      || '')
+  const [tutorSearch,  setTutorSearch]  = useState(() => {
+    if (existing?.tutorId) {
+      const t = tutors.find((t) => t.id === existing.tutorId)
+      return t ? `${t.name} — ${t.phone}` : ''
+    }
+    return ''
+  })
+  const [showTutorList, setShowTutorList] = useState(false)
+  const tutorRef = useRef(null)
+
+  // Close tutor dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e) {
+      if (tutorRef.current && !tutorRef.current.contains(e.target)) {
+        setShowTutorList(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+  const [demo,         setDemo]         = useState(existing?.demo         || '')
+  const [start,        setStart]        = useState(existing?.start        || '')
+  const [enqId, setEnqId] = useState(existing?.enqId || '')
+  const [error,        setError]        = useState('')
+  const [warnings,     setWarnings]     = useState([])
+  const [softConfirmed,setSoftConfirmed] = useState(false)
+  const [saving,       setSaving]       = useState(false)
+
+  function resetSoftConfirm() { setSoftConfirmed(false); setWarnings([]) }
+
+  function toggleSubject(s) {
+    setSubjects((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])
+  }
+  function toggleDay(d) {
+    setDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d])
+  }
+
+  async function handleSave() {
+    setError('')
+    setWarnings([])
+
+    // ── Strict mandatory checks ──
+    const enqPattern = /^[A-Z]{3}-\d{4}-\d{3}$/
+    if (!enqId.trim())                { setError('Enquiry ID is required.'); return }
+    if (!enqPattern.test(enqId))      { setError('Enquiry ID must be format: ABC-1234-567 (3 letters - 4 numbers - 3 numbers).'); return }
+    if (!studentName.trim())          { setError('Student name is required.'); return }
+    if (!parentName.trim())           { setError('Parent name is required.'); return }
+    if (!parentPhone.trim())          { setError('Parent phone is required.'); return }
+    if (parentPhone.replace(/\D/g,'').length !== 10) { setError('Parent phone must be 10 digits.'); return }
+    if (!standard)                    { setError('Standard is required.'); return }
+    if (!board)                       { setError('Board is required.'); return }
+    if (!city)                        { setError('City is required.'); return }
+    if (subjects.length === 0)        { setError('Select at least one subject.'); return }
+    if (days.length === 0)            { setError('Select at least one day.'); return }
+    if (!duration)                    { setError('Duration is required.'); return }
+    if (!start)                       { setError('Start date is required.'); return }
+    if (!feeParent)                   { setError('Fee (Parent) is required.'); return }
+    if (!feeTutor)                    { setError('Fee (Tutor) is required.'); return }
+    if (parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly') { setError('Parent Monthly + Tutor Hourly/Session is not a supported combination.'); return }
+
+    // Check duplicate enqId
+    const dupEnq = tuitions.find((t) => t.enqId?.toLowerCase() === enqId.toLowerCase() && t.id !== tuitionId)
+    if (dupEnq) { setError('Enquiry ID already exists. Please use a different one.'); return }
+
+    // ── Soft mandatory — collect warnings ──
+    const warns = []
+    if (!tutorId)     warns.push('Tutor not assigned — you can assign later.')
+    if (!demo)        warns.push('Demo date not set.')
+    if (!commission)  warns.push('One-time fee not set — you can update later.')
+    if (warns.length > 0 && !softConfirmed) {
+      setWarnings(warns)
+      return
+    }
+
+    setSaving(true)
+    const payload = {
+      enqId: enqId.toUpperCase(),
+      studentName: studentName.trim(),
+      parentName: parentName.trim(),
+      parentPhone: parentPhone.trim(),
+      standard, board, city,
+      subjects, days, duration,
+      feeParent: parseInt(feeParent),
+      feeTutor: parseInt(feeTutor),
+      feeCompany: estimateCompanyFee({ feeParent: parseInt(feeParent), feeTutor: parseInt(feeTutor), parentFeeType, tutorFeeType, duration, days }) ?? (parseInt(feeParent) - parseInt(feeTutor)),
+      commission: commission ? parseInt(commission) : 0,
+      feeType: parentFeeType, // backward compatibility
+      parentFeeType,
+      tutorFeeType,
+      calcMode: (parentFeeType === 'Monthly' && tutorFeeType === 'Monthly') ? calcMode : null,
+      repeatPayment,
+      tutorId: tutorId ? parseInt(tutorId) : null,
+      demo: demo || null,
+      start: start || null,
+      active: existing?.active ?? true,
+    }
+
+    try {
+      if (isEdit) {
+        await updateTuition(tuitionId, { ...payload, lastEditedBy: user?.name })
+      } else {
+        await addTuition({ ...payload, createdBy: user?.name || 'Admin' })
+      }
+      onSaved?.()
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Failed to save tuition.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const activeTutors = tutors.filter((t) => t.active)
+
+  return (
+    <Modal open onClose={onClose} size="lg" zIndex={200}
+      title={isEdit ? `Edit Tuition — ${existing?.studentName}` : 'Add Tuition'}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button id="protutor-save-btn" onClick={handleSave} loading={saving}>
+            {isEdit ? 'Save Changes' : 'Add Tuition'}
+          </Button>
+        </>
+      }
+    >
+      {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+      {warnings.length > 0 && !softConfirmed && (
+        <div className="mb-4 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-yellow-800 text-sm font-semibold mb-2">⚠ Please note:</p>
+          <ul className="list-disc list-inside space-y-1">
+            {warnings.map((w, i) => <li key={i} className="text-yellow-700 text-sm">{w}</li>)}
+          </ul>
+          <div className="flex gap-2 mt-3">
+            <button type="button"
+              onClick={() => { setSoftConfirmed(true); setTimeout(() => document.getElementById('protutor-save-btn')?.click(), 50) }}
+              className="px-4 py-1.5 bg-yellow-500 text-white text-sm font-semibold rounded-lg hover:bg-yellow-600">
+              Save anyway
+            </button>
+            <button type="button" onClick={() => setWarnings([])}
+              className="px-4 py-1.5 bg-white border border-yellow-300 text-yellow-700 text-sm font-semibold rounded-lg hover:bg-yellow-50">
+              Go back and fill
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-5">
+        {/* Enquiry ID */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              Enquiry ID <span className="text-red-500">*</span>
+              <span className="text-slate-300 font-normal normal-case ml-1">e.g. CHN-2601-103</span>
+            </label>
+            <input
+              value={enqId}
+              onChange={(e) => {
+                // Match original formatEnqId: 3 letters - 4 numbers - 3 numbers
+                let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'')
+                let out = ''
+                if (v.length > 0) out += v.slice(0,3)
+                if (v.length > 3) out += '-' + v.slice(3,7)
+                if (v.length > 7) out += '-' + v.slice(7,10)
+                setEnqId(out)
+              }}
+              placeholder="CHN-2601-103"
+              maxLength={12}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-widest"
+              style={{ letterSpacing: '1px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">City</label>
+            <select value={city} onChange={(e) => setCity(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Select city</option>
+              {ALL_CITIES.map((c) => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Student */}
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 pb-2 border-b border-slate-100">Student Details</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Student Name <span className="text-red-500">*</span></label>
+              <input value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Full name"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Parent Name</label>
+              <input value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="Parent full name"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Parent Phone <span className="text-red-500">*</span></label>
+              <input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="10-digit number" maxLength={10}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Standard</label>
+              <select value={standard} onChange={(e) => setStandard(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Select standard</option>
+                {STANDARDS.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Board</label>
+              <select value={board} onChange={(e) => setBoard(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Select board</option>
+                {BOARDS.map((b) => <option key={b}>{b}</option>)}
+              </select>
+            </div>
+            <div className="col-span-3">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tutor</label>
+              <div className="relative" ref={tutorRef}>
+                <input
+                  type="text"
+                  value={tutorSearch}
+                  onChange={(e) => {
+                    setTutorSearch(e.target.value)
+                    setTutorId('')
+                    setShowTutorList(true)
+                  }}
+                  onFocus={() => setShowTutorList(true)}
+                  placeholder="Search by name or phone..."
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {/* Selected tutor badge */}
+                {tutorId && (
+                  <button
+                    type="button"
+                    onClick={() => { setTutorId(''); setTutorSearch(''); setShowTutorList(false) }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 text-lg leading-none"
+                  >×</button>
+                )}
+                {/* Dropdown list */}
+                {showTutorList && tutorSearch && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {(() => {
+                      const q = tutorSearch.toLowerCase()
+                      const matches = activeTutors.filter((t) =>
+                        t.name.toLowerCase().includes(q) || t.phone.includes(q)
+                      )
+                      if (matches.length === 0) return (
+                        <div className="px-4 py-3 text-sm text-slate-400">No tutors found</div>
+                      )
+                      return matches.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setTutorId(t.id)
+                            setTutorSearch(`${t.name} — ${t.phone}`)
+                            setShowTutorList(false)
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center justify-between border-b border-slate-100 last:border-0"
+                        >
+                          <span className="font-medium text-slate-700">{t.name}</span>
+                          <span className="text-xs text-slate-400 font-mono">{t.phone}</span>
+                        </button>
+                      ))
+                    })()}
+                    <button
+                      type="button"
+                      onClick={() => { setTutorId(''); setTutorSearch(''); setShowTutorList(false) }}
+                      className="w-full text-left px-4 py-2.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100"
+                    >
+                      Clear / Unassigned
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Subjects */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Subjects</label>
+          <div className="flex flex-wrap gap-2">
+            {SUBJECTS.map((s) => (
+              <button key={s} type="button" onClick={() => toggleSubject(s)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                style={{ background: subjects.includes(s) ? '#1A56DB' : 'white', color: subjects.includes(s) ? 'white' : '#475569', borderColor: subjects.includes(s) ? '#1A56DB' : '#E2E8F0' }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Schedule */}
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 pb-2 border-b border-slate-100">Class Schedule</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Days <span className="text-red-500">*</span></label>
+              <div className="flex gap-2 flex-wrap">
+                {DAYS_OF_WEEK.map((d) => (
+                  <button key={d} type="button" onClick={() => toggleDay(d)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                    style={{ background: days.includes(d) ? '#1A56DB' : 'white', color: days.includes(d) ? 'white' : '#475569', borderColor: days.includes(d) ? '#1A56DB' : '#E2E8F0' }}>
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Duration (hr/day)</label>
+              <select value={duration} onChange={(e) => setDuration(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Select duration</option>
+                {DURATIONS.map((d) => <option key={d} value={d}>{d} hr</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Demo Date</label>
+              <input type="date" value={demo} onChange={(e) => setDemo(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Start Date</label>
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Start Month
+                <span className="text-slate-300 font-normal normal-case ml-1">(auto)</span>
+              </label>
+              <input
+                readOnly
+                value={start ? new Date(start + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : '—'}
+                className="w-full border border-slate-100 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Fee */}
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 pb-2 border-b border-slate-100">Fee Details</p>
+
+          {/* Row 1: Parent fee + type, Tutor fee + type */}
+          <div className="grid grid-cols-2 gap-4 mb-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fee (Parent) ₹ <span className="text-red-500">*</span></label>
+              <input type="number" value={feeParent} onChange={(e) => setFeeParent(e.target.value)} placeholder="e.g. 4000"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select value={parentFeeType} onChange={(e) => setParentFeeType(e.target.value)}
+                className="w-full mt-1.5 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                {FEE_TYPES.map((f) => <option key={f}>{f}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fee (Tutor) ₹ <span className="text-red-500">*</span></label>
+              <input type="number" value={feeTutor} onChange={(e) => setFeeTutor(e.target.value)} placeholder="e.g. 3000"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select value={tutorFeeType} onChange={(e) => setTutorFeeType(e.target.value)}
+                className="w-full mt-1.5 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                {FEE_TYPES.map((f) => <option key={f}>{f}</option>)}
+              </select>
+              <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                Tutor sees this as their fee
+              </p>
+            </div>
+          </div>
+
+          {/* Blocked combination warning */}
+          {parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly' && (
+            <div className="mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              Parent Monthly + Tutor {tutorFeeType} is not supported.
+            </div>
+          )}
+
+          {/* CalcMode toggle — only when both Monthly */}
+          {parentFeeType === 'Monthly' && tutorFeeType === 'Monthly' && (
+            <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-200">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Calculation</span>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                <input type="radio" name="calcMode" checked={calcMode === 'calendar'} onChange={() => setCalcMode('calendar')}
+                  className="accent-blue-600" />
+                Calendar days
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                <input type="radio" name="calcMode" checked={calcMode === 'fixed'} onChange={() => setCalcMode('fixed')}
+                  className="accent-blue-600" />
+                Fixed (×4 weeks)
+              </label>
+            </div>
+          )}
+
+          {/* Row 2: One-time fee + Repeat */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">One-Time Fee ₹</label>
+              <input type="number" value={commission} onChange={(e) => setCommission(e.target.value)} placeholder="e.g. 1500"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="col-span-2 flex items-center gap-3 mt-1">
+              <input type="checkbox" id="repeat-payment" checked={repeatPayment} onChange={(e) => setRepeatPayment(e.target.checked)}
+                className="w-4 h-4 accent-blue-600 cursor-pointer" />
+              <label htmlFor="repeat-payment" className="text-sm font-medium text-slate-700 cursor-pointer">
+                Repeat every cycle
+                <span className="text-xs text-slate-400 font-normal ml-1">(enables ongoing billing)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Fee to Company estimate */}
+          {feeParent && feeTutor && !(parentFeeType === 'Monthly' && tutorFeeType !== 'Monthly') && (
+            <div className="mt-3 px-4 py-3 bg-blue-50 rounded-lg text-sm flex items-center justify-between">
+              <div>
+                <span className="text-slate-600">Fee to Company: </span>
+                <strong className="text-blue-700">
+                  {parentFeeType === tutorFeeType
+                    ? `₹${parseInt(feeParent||0) - parseInt(feeTutor||0)}`
+                    : `~₹${estimateCompanyFee({ feeParent: parseInt(feeParent), feeTutor: parseInt(feeTutor), parentFeeType, tutorFeeType, duration, days }) ?? '—'}`
+                  }
+                </strong>
+                <span className="text-slate-400 text-xs ml-2">
+                  {parentFeeType === tutorFeeType
+                    ? `(${parentFeeType})`
+                    : '(estimated / month)'
+                  }
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}

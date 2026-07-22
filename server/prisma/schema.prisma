@@ -39,6 +39,7 @@ model Tutor {
   ifscVerified       Boolean   @default(false)
   panNumber          String    @default("")
   email              String    @default("")
+  bankSubmittedAt    DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
