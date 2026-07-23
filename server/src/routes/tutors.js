@@ -402,7 +402,9 @@ router.post('/refresh-rzp-status-manual', requireAuth, requireManager, async (re
   await refreshRzpStatus(res, req.user.name || 'admin')
 })
 
-// Shared status refresh logic
+// Shared status refresh logic — checks PRODUCT activation_status (not account status)
+// Account-level status stays "created" forever for Route. The real activation
+// state lives at /v2/accounts/:id/products/:pid → activation_status.
 async function refreshRzpStatus(res, actor) {
   const headers = rzpHeaders()
   if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured' })
@@ -411,9 +413,10 @@ async function refreshRzpStatus(res, actor) {
     const pending = await prisma.tutor.findMany({
       where: {
         paymentAccountId: { not: '' },
+        paymentProductId: { not: '' },
         paymentAccountStatus: { notIn: ['activated', 'rejected', 'suspended'] },
       },
-      select: { id: true, paymentAccountId: true, paymentAccountStatus: true },
+      select: { id: true, paymentAccountId: true, paymentProductId: true, paymentAccountStatus: true },
     })
     if (!pending.length) return res.json({ checked: 0, updated: 0 })
 
@@ -422,9 +425,9 @@ async function refreshRzpStatus(res, actor) {
     for (let i = 0; i < pending.length; i += BATCH) {
       const results = await Promise.all(pending.slice(i, i + BATCH).map(async (t) => {
         try {
-          const r = await rzpCall('GET', `/v2/accounts/${t.paymentAccountId}`, headers)
+          const r = await rzpCall('GET', `/v2/accounts/${t.paymentAccountId}/products/${t.paymentProductId}`, headers)
           if (!r.ok) return false
-          const newStatus = r.data.status || t.paymentAccountStatus
+          const newStatus = r.data.activation_status || t.paymentAccountStatus
           if (newStatus !== t.paymentAccountStatus) {
             await prisma.tutor.update({
               where: { id: t.id },
