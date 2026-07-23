@@ -190,14 +190,11 @@ function TutorViewModal({ tutorId, onClose }) {
   const tutors   = useDataStore((s) => s.tutors)
   const tuitions = useDataStore((s) => s.tuitions)
   const t = tutors.find((t) => t.id === tutorId)
-  const [editBankOpen, setEditBankOpen] = useState(false)
-  const [historyKey, setHistoryKey] = useState(0)  // increment to refresh BankHistory
   if (!t) return null
 
   const total  = tuitions.filter((tu) => tu.tutorId === t.id).length
   const active = tuitions.filter((tu) => tu.tutorId === t.id && tu.active).length
   const bankSet = !!(t.accountHolderName && t.accountNumber && t.ifscCode)
-  const isManager = true  // ViewModal is already behind requireManager access
 
   function Row({ label, value }) {
     return (
@@ -238,70 +235,20 @@ function TutorViewModal({ tutorId, onClose }) {
           </div>
         </div>
 
-        {/* Bank status + Razorpay */}
+        {/* Bank status */}
         <div className="px-4 py-3 bg-slate-50 rounded-lg border border-slate-100">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Bank Details</p>
           <span className={`text-xs px-2 py-1 rounded-full font-semibold ${bankSet ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
             {bankSet ? 'Bank details on file ✓' : 'No bank details'}
           </span>
-
-          {bankSet && (
-            <div className="mt-2 space-y-1">
-              <p className="text-xs text-slate-600"><span className="text-slate-400 w-24 inline-block">Holder:</span> {t.accountHolderName}</p>
-              <p className="text-xs text-slate-600 font-mono"><span className="text-slate-400 w-24 inline-block font-sans">Account:</span> {t.accountNumber}</p>
-              <p className="text-xs text-slate-600 font-mono"><span className="text-slate-400 w-24 inline-block font-sans">IFSC:</span> {t.ifscCode}</p>
-              <p className="text-xs text-slate-600 font-mono"><span className="text-slate-400 w-24 inline-block font-sans">PAN:</span> {t.panNumber}</p>
-              {isManager && (
-                <button onClick={() => setEditBankOpen(true)}
-                  className="mt-2 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-white">
-                  Edit Bank Details
-                </button>
-              )}
+          {t.paymentAccountId && (
+            <div className="mt-2">
+              <p className="text-xs font-mono text-slate-500">Account ID: {t.paymentAccountId}</p>
+              {t.paymentAccountStatus && <RzpStatusBadge status={t.paymentAccountStatus} />}
             </div>
           )}
-
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Razorpay Linked Account</p>
-          {t.paymentAccountId ? (
-            <div>
-              <p className="text-xs font-mono text-slate-500">Account: {t.paymentAccountId}</p>
-              {t.paymentStakeholderId && <p className="text-[11px] font-mono text-slate-400">Stakeholder: {t.paymentStakeholderId}</p>}
-              {t.paymentProductId && <p className="text-[11px] font-mono text-slate-400">Product: {t.paymentProductId}</p>}
-              <div className="mt-1"><RzpStatusBadge status={t.paymentAccountStatus} /></div>
-
-              {!t.paymentProductId && (
-                <>
-                  <p className="text-[11px] text-red-600 mt-1">Setup incomplete. Bank details not attached to Razorpay yet.</p>
-                  <RazorpayButton tutorId={t.id} isRetry />
-                </>
-              )}
-              {t.paymentProductId && t.paymentAccountStatus === 'activated' && (
-                <p className="text-[11px] text-green-600 mt-1">Account is active and ready for payouts.</p>
-              )}
-              {t.paymentAccountStatus === 'rejected' && (
-                <p className="text-[11px] text-red-600 mt-1">Razorpay rejected this account. Check Razorpay dashboard.</p>
-              )}
-              {t.paymentAccountStatus === 'suspended' && (
-                <p className="text-[11px] text-red-600 mt-1">Account suspended. Payouts blocked.</p>
-              )}
-              {t.paymentProductId && ['created', 'under_review', 'needs_clarification'].includes(t.paymentAccountStatus) && (
-                <p className="text-[11px] text-amber-600 mt-1">
-                  {t.paymentAccountStatus === 'needs_clarification'
-                    ? 'Razorpay needs more info. Check Razorpay dashboard.'
-                    : 'Awaiting Razorpay activation. Status checked every hour.'}
-                </p>
-              )}
-            </div>
-          ) : bankSet ? (
-            <RazorpayButton tutorId={t.id} />
-          ) : (
-            <p className="text-xs text-slate-400">Bank details required first</p>
-          )}
-
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Bank Change History</p>
-          <BankHistory tutorId={t.id} refreshKey={historyKey} />
         </div>
       </div>
-      {editBankOpen && <EditBankModal tutor={t} open onClose={() => { setEditBankOpen(false); setHistoryKey(k => k + 1) }} />}
     </Modal>
   )
 }
@@ -319,20 +266,16 @@ function TutorFormModal({ tutorId, onClose }) {
 
   const [name,     setName]     = useState(existing?.name    || '')
   const [phone,    setPhone]    = useState(existing?.phone   || '')
-  const [bankEdit, setBankEdit] = useState(!isEdit)
-  const [accHolder,setAccHolder]= useState(existing?.accountHolderName || '')
-  const [accNumber,setAccNumber]= useState(existing?.accountNumber     || '')
-  const [ifsc,     setIfsc]     = useState(existing?.ifscCode          || '')
-  const [pan,      setPan]      = useState(existing?.panNumber         || '')
-  const [email,    setEmail]    = useState(existing?.email             || '')
-  const [payAccId, setPayAccId] = useState(existing?.paymentAccountId  || '')
   const [error,    setError]    = useState('')
   const [saving,   setSaving]   = useState(false)
+  const [editBankOpen, setEditBankOpen] = useState(false)
+  const [historyKey, setHistoryKey] = useState(0)
 
   const [passDigits] = useState(
     existing?.passDigits || Math.floor(100 + Math.random() * 900).toString()
   )
   const pass = name.slice(0,4).toLowerCase().replace(/\s/g,'') + '@' + passDigits
+  const bankSet = !!(existing?.accountHolderName && existing?.accountNumber && existing?.ifscCode)
 
   async function handleSave() {
     setError('')
@@ -348,11 +291,6 @@ function TutorFormModal({ tutorId, onClose }) {
       name: name.trim(), phone: phone.trim(),
       active: existing?.active ?? true,
       passDigits,
-      ...(isManager ? {
-        accountHolderName: accHolder, accountNumber: accNumber,
-        ifscCode: ifsc.toUpperCase(), panNumber: pan.toUpperCase(),
-        email, paymentAccountId: payAccId,
-      } : {}),
     }
     try {
       if (isEdit) await updateTutor(tutorId, payload)
@@ -412,39 +350,60 @@ function TutorFormModal({ tutorId, onClose }) {
           </div>
         </div>
 
-        {isManager && (
+        {isManager && isEdit && (
           <div>
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Bank & Payment Details</p>
-              {isEdit && (
-                <button onClick={() => setBankEdit(!bankEdit)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${bankEdit ? 'text-red-600 border-red-200 bg-red-50' : 'text-orange-600 border-orange-200 bg-orange-50'}`}>
-                  {bankEdit ? '🔒 Lock' : '✏️ Edit'}
-                </button>
-              )}
-            </div>
-            <div className={`space-y-3 ${!bankEdit ? 'opacity-50 pointer-events-none' : ''}`}>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ['Account Holder', accHolder, setAccHolder, 'Name as per bank', false],
-                  ['Account Number', accNumber, (v) => setAccNumber(v.replace(/\D/g,'')), 'Account number', false],
-                  ['IFSC Code', ifsc, (v) => setIfsc(v.toUpperCase()), 'e.g. HDFC0001234', true],
-                  ['PAN Number', pan, (v) => setPan(v.toUpperCase()), 'e.g. ABCDE1234F', true],
-                  ['Email', email, setEmail, 'Email address', false],
-                  ['Payment Account ID', payAccId, setPayAccId, 'Razorpay account ID', true],
-                ].map(([label, value, setter, placeholder, mono]) => (
-                  <div key={label}>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</label>
-                    <input value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder}
-                      readOnly={!bankEdit}
-                      className={`w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${mono ? 'font-mono' : ''}`} />
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 pb-2 border-b border-slate-100">Bank & Payment Details</p>
+
+            {bankSet ? (
+              <div className="space-y-2 mb-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Account Holder</p>
+                    <p className="text-sm text-slate-700">{existing.accountHolderName}</p>
                   </div>
-                ))}
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Account Number</p>
+                    <p className="text-sm text-slate-700 font-mono">{existing.accountNumber}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">IFSC Code</p>
+                    <p className="text-sm text-slate-700 font-mono">{existing.ifscCode}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">PAN Number</p>
+                    <p className="text-sm text-slate-700 font-mono">{existing.panNumber}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Email</p>
+                    <p className="text-sm text-slate-700">{existing.email}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Payment Account ID</p>
+                    <p className="text-sm text-slate-700 font-mono">{existing.paymentAccountId || '—'}</p>
+                    {existing.paymentAccountStatus && <RzpStatusBadge status={existing.paymentAccountStatus} />}
+                  </div>
+                </div>
+                <button onClick={() => setEditBankOpen(true)}
+                  className="px-3 py-1.5 text-xs font-medium border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50">
+                  Update Bank Details
+                </button>
               </div>
-            </div>
+            ) : (
+              <p className="text-xs text-slate-400 mb-3">No bank details submitted yet. Tutor must submit from the app.</p>
+            )}
+
+            {bankSet && !existing.paymentProductId && (
+              <div className="mb-3">
+                <RazorpayButton tutorId={existing.id} isRetry={!!existing.paymentAccountId} />
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-400 uppercase font-semibold mt-4 mb-2">Bank Change History</p>
+            <BankHistory tutorId={existing.id} refreshKey={historyKey} />
           </div>
         )}
       </div>
+      {editBankOpen && existing && <EditBankModal tutor={existing} open onClose={() => { setEditBankOpen(false); setHistoryKey(k => k + 1) }} />}
     </Modal>
   )
 }
