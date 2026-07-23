@@ -250,9 +250,6 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
             },
           },
         },
-        legal_info: {
-          pan: tutor.panNumber,
-        },
       })
       if (!r.ok) {
         const msg = r.data?.error?.description || JSON.stringify(r.data)
