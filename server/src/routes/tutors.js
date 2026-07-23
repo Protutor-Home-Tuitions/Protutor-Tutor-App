@@ -246,7 +246,7 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
 
     // ── Step 1: Create Linked Account ──
     if (!accountId) {
-      const headers = rzpHeaders(`tutor_${tutor.id}_create_account`)
+      const headers = rzpHeaders()
       if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured.' })
 
       await logEvent(tutor.id, 'rzp_create', 'step1_start', 'in_progress', '', '', req.user.name)
@@ -273,7 +273,6 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
             },
           },
         },
-        legal_info: { pan: tutor.panNumber },
       })
 
       if (!r.ok) {
@@ -300,7 +299,7 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
 
     // ── Step 2: Create Stakeholder ──
     if (!stakeholderId) {
-      const headers = rzpHeaders(`tutor_${tutor.id}_create_stakeholder`)
+      const headers = rzpHeaders()
       if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured.' })
 
       await logEvent(tutor.id, 'rzp_create', 'step2_start', 'in_progress', accountId, '', req.user.name)
@@ -329,7 +328,7 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
 
     // ── Step 3: Request Product Configuration ──
     if (!productId) {
-      const headers = rzpHeaders(`tutor_${tutor.id}_request_product`)
+      const headers = rzpHeaders()
       if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured.' })
 
       await logEvent(tutor.id, 'rzp_create', 'step3_start', 'in_progress', accountId, '', req.user.name)
