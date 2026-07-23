@@ -86,6 +86,17 @@ export const useDataStore = create((set, get) => ({
     return tutor
   },
 
+  updateBankDetails: async (id, data) => {
+    const result = await api.updateBankDetails(id, data)
+    const tutor = result.tutor || result
+    set((s) => ({ tutors: s.tutors.map((t) => (t.id === id ? tutor : t)) }))
+    return result
+  },
+
+  getBankHistory: async (id) => {
+    return api.getBankHistory(id)
+  },
+
   addBilling: async (data) => {
     const billing = await api.createBilling(data)
     const enqId = data.enqId

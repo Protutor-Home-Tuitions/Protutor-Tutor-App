@@ -48,6 +48,8 @@ export const api = {
   createTutor: (data)     => request('POST',  '/tutors', data),
   updateTutor: (id, data) => request('PATCH', `/tutors/${id}`, data),
   createRazorpayAccount: (id) => request('POST', `/tutors/${id}/create-razorpay-account`),
+  updateBankDetails: (id, data) => request('PATCH', `/tutors/${id}/update-bank-details`, data),
+  getBankHistory: (id) => request('GET', `/tutors/${id}/bank-history`),
 
   // Attendance
   getAttendance:   (enqId) => request('GET',    `/attendance/${enqId}`),

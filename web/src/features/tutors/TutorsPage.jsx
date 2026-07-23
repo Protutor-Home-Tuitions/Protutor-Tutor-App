@@ -70,16 +70,134 @@ function RzpStatusBadge({ status }) {
   )
 }
 
+// ── Edit Bank Details modal ──
+function EditBankModal({ tutor, open, onClose }) {
+  const updateBankDetails = useDataStore((s) => s.updateBankDetails)
+  const [holderName, setHolderName] = useState(tutor.accountHolderName || '')
+  const [accNumber, setAccNumber] = useState('')
+  const [ifsc, setIfsc] = useState(tutor.ifscCode || '')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
+
+  if (!open) return null
+
+  async function handleSubmit() {
+    setError('')
+    setWarning('')
+    if (!holderName.trim() || !accNumber.trim() || !ifsc.trim()) {
+      return setError('Holder name, account number, and IFSC are required.')
+    }
+    if (!reason.trim() || reason.trim().length < 3) {
+      return setError('Reason for change is required (min 3 chars).')
+    }
+    setSaving(true)
+    try {
+      const result = await updateBankDetails(tutor.id, {
+        accountHolderName: holderName.trim(),
+        accountNumber: accNumber.trim(),
+        ifscCode: ifsc.trim().toUpperCase(),
+        reason: reason.trim(),
+      })
+      if (result.warning) {
+        alert(result.warning)  // Show warning but still close — DB is already updated
+      }
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} size="sm" zIndex={300} title="Update Bank Details">
+      <div className="space-y-3">
+        {error && <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>}
+        {warning && <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg">{warning}</p>}
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Account Holder Name *</label>
+          <input value={holderName} onChange={e => setHolderName(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="As per bank records" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Account Number *</label>
+          <input value={accNumber} onChange={e => setAccNumber(e.target.value.replace(/\D/g, '').slice(0, 18))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="New account number" inputMode="numeric" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">IFSC Code *</label>
+          <input value={ifsc} onChange={e => setIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="HDFC0001234" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Reason for change *</label>
+          <input value={reason} onChange={e => setReason(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="e.g. Tutor changed bank" />
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+          <p className="text-[11px] text-amber-700">Old bank details will be archived permanently. {tutor.paymentProductId ? 'Razorpay settlement will be updated automatically.' : ''}</p>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <Button variant="secondary" onClick={onClose} disabled={saving} className="flex-1">Cancel</Button>
+          <Button onClick={handleSubmit} loading={saving} className="flex-1">Update & Sync</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Bank change history ──
+function BankHistory({ tutorId, refreshKey }) {
+  const [history, setHistory] = useState([])
+  const [loaded, setLoaded] = useState(false)
+  const getBankHistory = useDataStore((s) => s.getBankHistory)
+
+  useEffect(() => {
+    setLoaded(false)
+    getBankHistory(tutorId).then(rows => { setHistory(rows || []); setLoaded(true) }).catch(() => setLoaded(true))
+  }, [tutorId, refreshKey])
+
+  if (!loaded) return <p className="text-[11px] text-slate-400">Loading history…</p>
+  if (!history.length) return <p className="text-[11px] text-slate-400">No changes yet</p>
+
+  function mask(num) {
+    if (!num || num.length <= 4) return num || ''
+    return '••••' + num.slice(-4)
+  }
+
+  return (
+    <div className="space-y-2">
+      {history.map((h, i) => (
+        <div key={h.id || i} className="bg-white border border-slate-100 rounded-lg p-2.5">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[10px] text-slate-400">{new Date(h.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+            <span className="text-[10px] text-slate-400">by {h.changed_by}</span>
+          </div>
+          <p className="text-[11px] text-slate-600">
+            {mask(h.old_account_number)} ({h.old_ifsc_code?.slice(0,4)}) → {mask(h.new_account_number)} ({h.new_ifsc_code?.slice(0,4)})
+          </p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Reason: {h.reason}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Read-only view modal ──
 function TutorViewModal({ tutorId, onClose }) {
   const tutors   = useDataStore((s) => s.tutors)
   const tuitions = useDataStore((s) => s.tuitions)
   const t = tutors.find((t) => t.id === tutorId)
+  const [editBankOpen, setEditBankOpen] = useState(false)
+  const [historyKey, setHistoryKey] = useState(0)  // increment to refresh BankHistory
   if (!t) return null
 
   const total  = tuitions.filter((tu) => tu.tutorId === t.id).length
   const active = tuitions.filter((tu) => tu.tutorId === t.id && tu.active).length
   const bankSet = !!(t.accountHolderName && t.accountNumber && t.ifscCode)
+  const isManager = true  // ViewModal is already behind requireManager access
 
   function Row({ label, value }) {
     return (
@@ -127,6 +245,21 @@ function TutorViewModal({ tutorId, onClose }) {
             {bankSet ? 'Bank details on file ✓' : 'No bank details'}
           </span>
 
+          {bankSet && (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-slate-600"><span className="text-slate-400 w-24 inline-block">Holder:</span> {t.accountHolderName}</p>
+              <p className="text-xs text-slate-600 font-mono"><span className="text-slate-400 w-24 inline-block font-sans">Account:</span> {t.accountNumber}</p>
+              <p className="text-xs text-slate-600 font-mono"><span className="text-slate-400 w-24 inline-block font-sans">IFSC:</span> {t.ifscCode}</p>
+              <p className="text-xs text-slate-600 font-mono"><span className="text-slate-400 w-24 inline-block font-sans">PAN:</span> {t.panNumber}</p>
+              {isManager && (
+                <button onClick={() => setEditBankOpen(true)}
+                  className="mt-2 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-white">
+                  Edit Bank Details
+                </button>
+              )}
+            </div>
+          )}
+
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Razorpay Linked Account</p>
           {t.paymentAccountId ? (
             <div>
@@ -163,8 +296,12 @@ function TutorViewModal({ tutorId, onClose }) {
           ) : (
             <p className="text-xs text-slate-400">Bank details required first</p>
           )}
+
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Bank Change History</p>
+          <BankHistory tutorId={t.id} refreshKey={historyKey} />
         </div>
       </div>
+      {editBankOpen && <EditBankModal tutor={t} open onClose={() => { setEditBankOpen(false); setHistoryKey(k => k + 1) }} />}
     </Modal>
   )
 }
