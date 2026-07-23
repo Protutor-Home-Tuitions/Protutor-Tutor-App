@@ -520,10 +520,10 @@ router.patch('/:id/update-bank-details', requireAuth, requireManager, async (req
             tutor: await prisma.tutor.findUnique({ where: { id: tutor.id } }),
           })
         }
-        // Reset status to pending_verification — cron will re-check on next hourly run
+        // Reset status to 'created' — cron will re-check on next hourly run
         await prisma.tutor.update({
           where: { id: tutor.id },
-          data: { paymentAccountStatus: 'pending_verification' },
+          data: { paymentAccountStatus: 'created' },
         })
         await logEvent(tutor.id, 'bank_update', 'rzp_sync_done', 'success', tutor.paymentProductId, '', req.user.name)
       }
