@@ -50,6 +50,7 @@ export const api = {
   createRazorpayAccount: (id) => request('POST', `/tutors/${id}/create-razorpay-account`),
   updateBankDetails: (id, data) => request('PATCH', `/tutors/${id}/update-bank-details`, data),
   getBankHistory: (id) => request('GET', `/tutors/${id}/bank-history`),
+  refreshRzpStatus: () => request('POST', '/tutors/refresh-rzp-status-manual'),
 
   // Attendance
   getAttendance:   (enqId) => request('GET',    `/attendance/${enqId}`),

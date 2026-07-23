@@ -394,6 +394,16 @@ router.get('/refresh-rzp-status', async (req, res) => {
   if (!secret || req.headers['x-cron-secret'] !== secret) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
+  await refreshRzpStatus(res, 'cron')
+})
+
+// ── Admin: manually refresh Razorpay status (bypass cron) ──
+router.post('/refresh-rzp-status-manual', requireAuth, requireManager, async (req, res) => {
+  await refreshRzpStatus(res, req.user.name || 'admin')
+})
+
+// Shared status refresh logic
+async function refreshRzpStatus(res, actor) {
   const headers = rzpHeaders()
   if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured' })
 
@@ -420,7 +430,7 @@ router.get('/refresh-rzp-status', async (req, res) => {
               where: { id: t.id },
               data: { paymentAccountStatus: newStatus },
             })
-            await logEvent(t.id, 'rzp_status_refresh', 'cron', newStatus, t.paymentAccountId, '', 'cron')
+            await logEvent(t.id, 'rzp_status_refresh', actor, newStatus, t.paymentAccountId, '', actor)
             return true
           }
           return false
@@ -433,7 +443,7 @@ router.get('/refresh-rzp-status', async (req, res) => {
     console.error('Refresh RZP status error:', err.message)
     res.status(500).json({ error: 'Server error' })
   }
-})
+}
 
 // ── Admin: update tutor's bank details + sync to Razorpay ──
 // Archives old details to bank_details_history, updates DB, patches Razorpay settlement.
@@ -510,6 +520,11 @@ router.patch('/:id/update-bank-details', requireAuth, requireManager, async (req
             tutor: await prisma.tutor.findUnique({ where: { id: tutor.id } }),
           })
         }
+        // Reset status to pending_verification — cron will re-check on next hourly run
+        await prisma.tutor.update({
+          where: { id: tutor.id },
+          data: { paymentAccountStatus: 'pending_verification' },
+        })
         await logEvent(tutor.id, 'bank_update', 'rzp_sync_done', 'success', tutor.paymentProductId, '', req.user.name)
       }
     }

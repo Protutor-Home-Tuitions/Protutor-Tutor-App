@@ -70,6 +70,35 @@ function RzpStatusBadge({ status }) {
   )
 }
 
+// ── Manual RZP status refresh button ──
+function RefreshRzpButton() {
+  const refreshRzpStatus = useDataStore((s) => s.refreshRzpStatus)
+  const [loading, setLoading] = useState(false)
+
+  async function handleRefresh() {
+    setLoading(true)
+    try {
+      const result = await refreshRzpStatus()
+      alert(`Checked ${result.checked} pending account${result.checked !== 1 ? 's' : ''}. ${result.updated} status update${result.updated !== 1 ? 's' : ''} applied.`)
+    } catch (err) {
+      alert('Failed: ' + (err.message || 'Unknown error'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button onClick={handleRefresh} disabled={loading}
+      className="px-3 py-2 text-sm font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={loading ? 'animate-spin' : ''}>
+        <polyline points="23 4 23 10 17 10"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      {loading ? 'Checking…' : 'Refresh RZP Status'}
+    </button>
+  )
+}
+
 // ── Edit Bank Details modal ──
 function EditBankModal({ tutor, open, onClose }) {
   const updateBankDetails = useDataStore((s) => s.updateBankDetails)
@@ -452,7 +481,10 @@ export default function TutorsPage() {
           <h1 className="text-xl font-bold text-slate-800">Tutors</h1>
           <p className="text-slate-500 text-sm mt-0.5">Manage tutor accounts — {isManager ? 'Admin' : user?.role}</p>
         </div>
-        {canAdd && <Button onClick={() => setAddOpen(true)}>+ Add Tutor</Button>}
+        <div className="flex gap-2">
+          {isManager && <RefreshRzpButton />}
+          {canAdd && <Button onClick={() => setAddOpen(true)}>+ Add Tutor</Button>}
+        </div>
       </div>
 
       <div className="flex gap-3 mb-5">

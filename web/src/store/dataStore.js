@@ -97,6 +97,14 @@ export const useDataStore = create((set, get) => ({
     return api.getBankHistory(id)
   },
 
+  refreshRzpStatus: async () => {
+    const result = await api.refreshRzpStatus()
+    // Refetch tutors so admin sees updated statuses
+    const tutors = await api.getTutors()
+    set({ tutors })
+    return result
+  },
+
   addBilling: async (data) => {
     const billing = await api.createBilling(data)
     const enqId = data.enqId
