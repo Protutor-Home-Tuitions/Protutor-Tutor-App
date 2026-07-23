@@ -32,9 +32,11 @@ model Tutor {
   phone              String    @unique
   active             Boolean   @default(true)
   passDigits         String    @default("")
-  paymentAccountId   String    @default("") // Razorpay account ID
-  paymentAccountStatus String  @default("") // created | activated | needs_clarification | rejected | suspended | under_review
-  accountHolderName  String    @default("")
+  paymentAccountId       String    @default("") // Razorpay linked account ID (acc_xxx)
+  paymentAccountStatus   String    @default("") // created | activated | needs_clarification | rejected | suspended
+  paymentStakeholderId   String    @default("") // Razorpay stakeholder ID (sth_xxx)
+  paymentProductId       String    @default("") // Razorpay product ID (acc_prd_xxx)
+  accountHolderName      String    @default("")
   accountNumber      String    @default("")
   ifscCode           String    @default("")
   ifscVerified       Boolean   @default(false)

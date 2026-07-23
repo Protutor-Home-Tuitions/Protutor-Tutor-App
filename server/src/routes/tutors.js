@@ -176,7 +176,7 @@ router.post('/bank-details', requireAuth, async (req, res) => {
   }
 })
 
-// ── Razorpay helper ──
+// ── Razorpay API helper ──
 function rzpHeaders() {
   const key = process.env.RAZORPAY_KEY_ID
   const secret = process.env.RAZORPAY_KEY_SECRET
@@ -187,74 +187,134 @@ function rzpHeaders() {
   }
 }
 
-// ── Admin: create Razorpay linked account for a tutor ──
+async function rzpCall(method, path, headers, body) {
+  const res = await fetch(`https://api.razorpay.com${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const data = await res.json()
+  return { ok: res.ok, status: res.status, data }
+}
+
+// ── Admin: Create Razorpay linked account for a tutor ──
+// 4-step flow per Razorpay Route V2 docs:
+//   Step 1: POST /v2/accounts                              → create linked account
+//   Step 2: POST /v2/accounts/:id/stakeholders             → create stakeholder (PAN/KYC)
+//   Step 3: POST /v2/accounts/:id/products                 → request "route" product
+//   Step 4: PATCH /v2/accounts/:id/products/:pid           → attach bank settlement details
+// Each step is persisted to DB immediately. If any step fails, admin can retry —
+// the route skips already-completed steps and resumes from where it stopped.
 router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (req, res) => {
   try {
     const tutor = await prisma.tutor.findUnique({ where: { id: parseInt(req.params.id) } })
     if (!tutor) return res.status(404).json({ error: 'Tutor not found' })
 
-    if (tutor.paymentAccountId) {
-      return res.status(409).json({ error: `Razorpay account already exists: ${tutor.paymentAccountId}` })
-    }
-
-    // Require full bank details AND email (fabricated emails cause Razorpay activation failure)
+    // Validate prerequisites
     if (!tutor.email || !tutor.email.includes('@')) {
-      return res.status(400).json({ error: 'Tutor email is required. Ask tutor to submit bank details form first.' })
+      return res.status(400).json({ error: 'Tutor email is required. Ask tutor to submit bank details first.' })
     }
     const bankSet = !!(tutor.accountHolderName && tutor.accountNumber && tutor.ifscCode && tutor.panNumber)
     if (!bankSet) {
-      return res.status(400).json({ error: 'Complete bank details (account holder, number, IFSC, PAN) required before creating Razorpay account.' })
+      return res.status(400).json({ error: 'Complete bank details (holder name, account number, IFSC, PAN) required.' })
     }
 
     const headers = rzpHeaders()
     if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured on server.' })
 
-    const payload = {
-      email: tutor.email,
-      phone: tutor.phone,
-      type: 'route',
-      reference_id: `tutor_${tutor.id}`,
-      legal_business_name: tutor.name,
-      business_type: 'individual',
-      contact_name: tutor.name,
-      dashboard_access: 1,
-      customer_refunds: 0,
-      profile: {
-        category: 'education',
-        subcategory: 'tutoring',
-      },
-      bank_account: {
+    let accountId     = tutor.paymentAccountId
+    let stakeholderId = tutor.paymentStakeholderId
+    let productId     = tutor.paymentProductId
+
+    // ── Step 1: Create Linked Account ──
+    if (!accountId) {
+      const r = await rzpCall('POST', '/v2/accounts', headers, {
+        email: tutor.email,
+        phone: tutor.phone,
+        type: 'route',
+        reference_id: `tutor_${tutor.id}`,
+        legal_business_name: tutor.name,
+        business_type: 'individual',
+        contact_name: tutor.name,
+        profile: {
+          category: 'education',
+          subcategory: 'coaching',
+        },
+        legal_info: {
+          pan: tutor.panNumber,
+        },
+      })
+      if (!r.ok) {
+        const msg = r.data?.error?.description || JSON.stringify(r.data)
+        return res.status(r.status).json({ error: `Step 1 (Create Account): ${msg}` })
+      }
+      accountId = r.data.id
+      if (!accountId) return res.status(500).json({ error: 'Razorpay returned no account ID' })
+      await prisma.tutor.update({
+        where: { id: tutor.id },
+        data: { paymentAccountId: accountId, paymentAccountStatus: r.data.status || 'created' },
+      })
+    }
+
+    // ── Step 2: Create Stakeholder (PAN for KYC) ──
+    if (!stakeholderId) {
+      const r = await rzpCall('POST', `/v2/accounts/${accountId}/stakeholders`, headers, {
+        name: tutor.name,
+        email: tutor.email,
+        kyc: {
+          pan: tutor.panNumber,
+        },
+      })
+      if (!r.ok) {
+        const msg = r.data?.error?.description || JSON.stringify(r.data)
+        return res.status(r.status).json({ error: `Step 2 (Create Stakeholder): ${msg}` })
+      }
+      stakeholderId = r.data.id
+      if (!stakeholderId) return res.status(500).json({ error: 'Razorpay returned no stakeholder ID' })
+      await prisma.tutor.update({
+        where: { id: tutor.id },
+        data: { paymentStakeholderId: stakeholderId },
+      })
+    }
+
+    // ── Step 3: Request Product Configuration ──
+    if (!productId) {
+      const r = await rzpCall('POST', `/v2/accounts/${accountId}/products`, headers, {
+        product_name: 'route',
+        tnc_accepted: true,
+      })
+      if (!r.ok) {
+        const msg = r.data?.error?.description || JSON.stringify(r.data)
+        return res.status(r.status).json({ error: `Step 3 (Request Product): ${msg}` })
+      }
+      productId = r.data.id ||
+        (r.data.requirements?.[0]?.resolution_url?.match(/products\/(acc_prd_\w+)/)?.[1]) || ''
+      if (!productId) {
+        console.error('Razorpay product response (no id found):', JSON.stringify(r.data))
+        return res.status(500).json({ error: 'Razorpay returned no product ID' })
+      }
+      await prisma.tutor.update({
+        where: { id: tutor.id },
+        data: { paymentProductId: productId },
+      })
+    }
+
+    // ── Step 4: Update Product Config with bank settlement details ──
+    const r = await rzpCall('PATCH', `/v2/accounts/${accountId}/products/${productId}`, headers, {
+      settlements: {
+        account_number: tutor.accountNumber,
         ifsc_code: tutor.ifscCode,
         beneficiary_name: tutor.accountHolderName,
-        account_number: tutor.accountNumber,
       },
-      legal_info: {
-        pan: tutor.panNumber,
-      },
+      tnc_accepted: true,
+    })
+    if (!r.ok) {
+      const msg = r.data?.error?.description || JSON.stringify(r.data)
+      return res.status(r.status).json({ error: `Step 4 (Attach Bank): ${msg}` })
     }
 
-    const rzpRes = await fetch('https://api.razorpay.com/v2/accounts', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    })
-
-    const rzpData = await rzpRes.json()
-
-    if (!rzpRes.ok) {
-      const errMsg = rzpData?.error?.description || rzpData?.message || JSON.stringify(rzpData)
-      console.error('Razorpay account creation failed for tutor', tutor.id, ':', errMsg)
-      return res.status(rzpRes.status).json({ error: `Razorpay: ${errMsg}` })
-    }
-
-    const updated = await prisma.tutor.update({
-      where: { id: tutor.id },
-      data: {
-        paymentAccountId:     rzpData.id || '',
-        paymentAccountStatus: rzpData.status || 'created',
-      },
-    })
-
+    // Re-fetch and return updated tutor
+    const updated = await prisma.tutor.findUnique({ where: { id: tutor.id } })
     res.json(updated)
   } catch (err) {
     console.error('Create Razorpay account error:', err)
@@ -264,7 +324,6 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
 
 // ── Cron: refresh Razorpay account status for all pending tutors ──
 // Called by Supabase pg_cron every hour. Protected by CRON_SECRET header.
-// Processes accounts in parallel batches of 10 to stay within Vercel timeout.
 router.get('/refresh-rzp-status', async (req, res) => {
   const secret = process.env.CRON_SECRET
   if (!secret || req.headers['x-cron-secret'] !== secret) {
@@ -275,10 +334,9 @@ router.get('/refresh-rzp-status', async (req, res) => {
   if (!headers) return res.status(500).json({ error: 'Razorpay credentials not configured' })
 
   try {
-    // Only accounts that are neither activated nor terminal (rejected/suspended)
     const pending = await prisma.tutor.findMany({
       where: {
-        paymentAccountId:     { not: '' },
+        paymentAccountId: { not: '' },
         paymentAccountStatus: { notIn: ['activated', 'rejected', 'suspended'] },
       },
       select: { id: true, paymentAccountId: true, paymentAccountStatus: true },
@@ -286,33 +344,23 @@ router.get('/refresh-rzp-status', async (req, res) => {
 
     if (!pending.length) return res.json({ checked: 0, updated: 0 })
 
-    // Process in parallel batches of 10 (Razorpay handles bursts fine)
-    const BATCH_SIZE = 10
+    const BATCH = 10
     let updated = 0
-
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const batch = pending.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(batch.map(async (tutor) => {
+    for (let i = 0; i < pending.length; i += BATCH) {
+      const results = await Promise.all(pending.slice(i, i + BATCH).map(async (t) => {
         try {
-          const rzpRes = await fetch(
-            `https://api.razorpay.com/v2/accounts/${tutor.paymentAccountId}`,
-            { method: 'GET', headers }
-          )
-          if (!rzpRes.ok) return null
-          const rzpData = await rzpRes.json()
-          const newStatus = rzpData.status || tutor.paymentAccountStatus
-          if (newStatus !== tutor.paymentAccountStatus) {
+          const r = await rzpCall('GET', `/v2/accounts/${t.paymentAccountId}`, headers)
+          if (!r.ok) return false
+          const newStatus = r.data.status || t.paymentAccountStatus
+          if (newStatus !== t.paymentAccountStatus) {
             await prisma.tutor.update({
-              where: { id: tutor.id },
+              where: { id: t.id },
               data: { paymentAccountStatus: newStatus },
             })
             return true
           }
           return false
-        } catch (err) {
-          console.error(`RZP status check failed for tutor ${tutor.id}:`, err.message)
-          return null
-        }
+        } catch { return false }
       }))
       updated += results.filter(Boolean).length
     }
