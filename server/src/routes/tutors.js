@@ -239,6 +239,16 @@ router.post('/:id/create-razorpay-account', requireAuth, requireManager, async (
         profile: {
           category: 'education',
           subcategory: 'coaching',
+          addresses: {
+            registered: {
+              street1: '715-A, Spencer Plaza',
+              street2: 'Anna Salai',
+              city: 'Chennai',
+              state: 'TAMIL NADU',
+              postal_code: '600002',
+              country: 'IN',
+            },
+          },
         },
         legal_info: {
           pan: tutor.panNumber,
